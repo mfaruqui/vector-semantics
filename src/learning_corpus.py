@@ -1,22 +1,35 @@
 import numpy as np
 import gzip
+import json
+import sys
+from scipy.sparse import csr_matrix
 
 class LearningCorpus:
     
-    def __init__(self, corpusFileName, windowSize, freqCutoff):
+    def __init__(self, freqCutoff, windowSize, corpusFileName=None, vocab=None, wordFeatures=None, contextMat=None):
         
-        self.corpusName = corpusFileName
-        self.vocab = self.read_corpus()
-        self.vocabLen = len(self.vocab)
+        if corpusFileName == None:
+            self.vocab = dict(vocab)
+            self.vocabLen = len(self.vocab)
+            self.wordFeatures = dict(wordFeatures)
+            self.featLen = len(self.wordFeatures)
+            
+            self.windowSize = windowSize
+            self.freqCutoffForFeatSelection = freqCutoff
+            self.contextMat = csr_matrix(contextMat)
+        else:
+            self.corpusName = corpusFileName
+            self.vocab = self.read_corpus()
+            self.vocabLen = len(self.vocab)
         
-        self.windowSize = windowSize
-        self.freqCutoffForFeatSelection = freqCutoff
-        self.wordFeatures = self.select_feat_words()
-        self.featLen = len(self.wordFeatures)
+            self.windowSize = windowSize
+            self.freqCutoffForFeatSelection = freqCutoff
+            self.wordFeatures = self.select_feat_words()
+            self.featLen = len(self.wordFeatures)
         
-        self.contextMat = np.zeros((self.vocabLen, self.featLen), dtype=int)
-        self.get_context_vectors()
-        
+            self.contextMat = np.zeros((self.vocabLen, self.featLen), dtype=int)
+            self.get_context_vectors()
+    
     def read_corpus(self):
         
         vocab = {}
@@ -29,7 +42,8 @@ class LearningCorpus:
                 else:
                     vocab[word] = [wordId, 1]
                     wordId += 1
-                    
+        
+        sys.stderr.write("VocabLen: "+str(len(vocab))+"\n")
         return vocab
         
     def select_feat_words(self):
@@ -40,7 +54,8 @@ class LearningCorpus:
             if freq > self.freqCutoffForFeatSelection:
                 wordFeatures[word] = index
                 index += 1
-                
+        
+        sys.stderr.write("FeatLen: "+str(len(wordFeatures))+"\n")        
         return wordFeatures
     
     #Will work properly only if window size if lesser than the number of tokens
@@ -48,9 +63,14 @@ class LearningCorpus:
         
         window = []
         firstWindow = 1
+        wordNum = 0
+        sys.stderr.write("Processing words:\n")
         with gzip.open(self.corpusName, 'r') as f:
             for word in f.read().strip().split()+['.']:
                 word = unicode(word,"utf-8")
+                wordNum += 1
+                if wordNum % 100000 == 0:
+                    sys.stderr.write(str(wordNum)+' ')
                 
                 #collecting words to make the window full
                 if len(window) < self.windowSize + 1:
@@ -77,3 +97,14 @@ class LearningCorpus:
                     #remove the first word and insert the new word in the window
                     garbage = window.pop(0)
                     window.append(word)
+                    
+    def save_whole_corpus(self, dictionaryFile, contextMatFile):
+            
+        dictFile = open(dictionaryFile,'w')
+        dictFile.write(str(self.freqCutoff)+' '+str(self.windowSize)+'\n')
+        dictFile.write(json.dumps(self.vocab)+'\n')
+        dictFile.write(json.dumps(self.wordFeatures)+'\n')
+        dictFile.close()
+            
+        contextMatFile = open(contextMatFile,'w')
+        np.save(contextMatFile, self.contextMat)
