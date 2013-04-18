@@ -4,7 +4,7 @@ import os
 import sys
 import time
 import math
-
+import argparse
 import numpy
 
 import theano
@@ -30,29 +30,19 @@ def get_number_of_batches(dataset, batch_size):
     else:
         return len(dataset)/batch_size + 1
         
-def run_mlp(datasets):
+def run_mlp(datasets, n_epochs, n_hidden, batch_size, L1_reg, L2_reg, learning_rate=None):
     
     train_set_x, train_set_y = datasets[0]
     valid_set_x, valid_set_y = datasets[1]
     
     del datasets
     
-    #Useless variables for now
-    L1_reg=0.00
-    L2_reg=0.0001
-    
-    #Vairables to be tuned
-    #learning_rate = 1.0
-    n_epochs= 5
-    batch_size = 1
-    n_hidden = 100
-    
     n_out = len(train_set_y[0])
     n_in = len(train_set_x[0])
     
-    sys.stderr.write("Number of nodes, Input: {0}, Hidden: {1}, Output: {2}\n".format(n_in, n_hidden, n_out))
-    sys.stderr.write("Epochs: {0}, Batch Size: {1}\n".format(n_epochs, batch_size))
-    sys.stderr.write("L1_reg: {0}, L2_reg: {1}\n".format(L1_reg, L2_reg))
+    sys.stderr.write("\nNumber of nodes:-\n  Input: {0}\n  Hidden: {1}\n  Output: {2}\n".format(n_in, n_hidden, n_out))
+    sys.stderr.write("\nEpochs: {0}\nBatch Size: {1}\n".format(n_epochs, batch_size))
+    sys.stderr.write("\nL1_reg: {0}\nL2_reg: {1}\n".format(L1_reg, L2_reg))
     
     n_train_batches = get_number_of_batches(train_set_x, batch_size)
     n_valid_batches = get_number_of_batches(valid_set_x, batch_size)
@@ -87,13 +77,14 @@ def run_mlp(datasets):
     # the resulting gradients will be stored in a list gparams
     gparams = [T.grad(cost, param) for param in classifier.params]
     
-    # SGD
-    #sys.stderr.write('\nUsing SGD...\n')
-    #updates = [(param, param - learning_rate * gparam) for param, gparam in zip(classifier.params, gparams)]
-    
-    # RPROP+
-    sys.stderr.write('\nUsing RPROP+...\n')
-    updates = [(param, param_updated) for (param, param_updated) in rprop_plus_updates(classifier.params, gparams)]
+    if learning_rate is not None:
+        # SGD
+        sys.stderr.write('\nUsing SGD with learning rate: {0}\n'.format(learning_rate))
+        updates = [(param, param - learning_rate * gparam) for param, gparam in zip(classifier.params, gparams)]
+    else:
+        # RPROP+
+        sys.stderr.write('\nUsing RPROP+...\n')
+        updates = [(param, param_updated) for (param, param_updated) in rprop_plus_updates(classifier.params, gparams)]
     
     # compiling a Theano function `train_model` that returns the cost, but
     # in the same time updates the parameter of the model based on the rules
@@ -157,5 +148,26 @@ def run_mlp(datasets):
 
 if __name__ == '__main__':
     
-    datasets = get_datasets(sys.argv[1], sys.argv[2])
-    run_mlp(datasets)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-tr", "--trainfile", type=str, help="Joint parallel file of two languages; sentences separated by |||")
+    parser.add_argument("-val", "--valfile", type=str, help="Validation corpus in the same format as training file")
+    parser.add_argument("-l1", "--l1reg", type=float, default='0.01', help="Coeff of L1-reg")
+    parser.add_argument("-l2", "--l2reg", type=float, default='0.01', help="Coeff of L2-reg")
+    parser.add_argument("-n", "--numepoch", type=int, default=10, help="No. of epochs")
+    parser.add_argument("-b", "--batchsize", type=int, default=10, help="Batch size")
+    parser.add_argument("-hid", "--hiddenlayer", type=int, default=100, help="No. of nodes in hidden layer")
+    parser.add_argument("-r", "--learningrate", type=float, default=None, help="Learning rate for backprop")
+    
+    args = parser.parse_args()
+    
+    trainFileName = args.trainfile
+    valFileName = args.valfile
+    L1_reg = args.l1reg
+    L2_reg = args.l2reg
+    n_epochs = args.numepoch
+    batch_size = args.batchsize
+    n_hidden = args.hiddenlayer
+    learning_rate = args.learningrate
+    
+    datasets = get_datasets(trainFileName, valFileName)
+    run_mlp(datasets, n_epochs, n_hidden, batch_size, L1_reg, L2_reg, learning_rate)
