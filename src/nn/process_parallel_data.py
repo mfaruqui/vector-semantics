@@ -48,12 +48,26 @@ def get_vocab(fileName, lang1Vocab=Counter(), lang2Vocab=Counter()):
 
     #trim the vocab by frequency and replace frequency by unique number
     return numLines, trim_vocab(lang1Vocab), trim_vocab(lang2Vocab)
+    
+def convert_dict_to_csr_matrix(matrixDict, sizeData, langVocab):
+    
+    row = numpy.zeros(len(matrixDict), dtype=int)
+    col = numpy.zeros(len(matrixDict), dtype=int)
+    values = numpy.zeros(len(matrixDict), dtype=int)
+    
+    index = 0
+    for (r, c), val in matrixDict.iteritems():
+        row[index] = r
+        col[index] = c
+        values[index] = val
+        index += 1
+    
+    matrixLang = csr_matrix((values,(row,col)), shape=(sizeData,len(langVocab)))
+    return matrixLang
 
 def get_parallel_cooccurence_arrays(fileName, lang1Vocab, lang2Vocab, sizeData):
     
-    matrixLang1 = numpy.zeros((sizeData, len(lang1Vocab)), dtype=numpy.int)
-    matrixLang2 = numpy.zeros((sizeData, len(lang2Vocab)), dtype=numpy.int)
-    
+    matrixDict1 = Counter()
     numLine = 0
     for line in open(fileName, 'r'):
         lang1, lang2 = line.split('|||')
@@ -64,12 +78,14 @@ def get_parallel_cooccurence_arrays(fileName, lang1Vocab, lang2Vocab, sizeData):
             word = normalize_word(word)
             if word in lang1Vocab:
                 # we want count of the words on the input
-                matrixLang1[numLine][lang1Vocab[word]] += 1
+                matrixDict1[(numLine,lang1Vocab[word])] += 1
                 
         numLine += 1
-                
-    matrixLang1 = csr_matrix(matrixLang1)
-
+    
+    matrixLang1 = convert_dict_to_csr_matrix(matrixDict1, sizeData, lang1Vocab)  
+    del matrixDict1
+    
+    matrixDict2 = Counter()
     numLine = 0
     for line in open(fileName, 'r'):
         lang1, lang2 = line.split('|||')
@@ -80,11 +96,12 @@ def get_parallel_cooccurence_arrays(fileName, lang1Vocab, lang2Vocab, sizeData):
             word = normalize_word(word)
             if word in lang2Vocab:
                 # we want probability of occurrence on the output
-                matrixLang2[numLine][lang2Vocab[word]] = 1
+                matrixDict2[(numLine,lang2Vocab[word])] = 1
             
         numLine += 1
-        
-    matrixLang2 = csr_matrix(matrixLang2)
+    
+    matrixLang2 = convert_dict_to_csr_matrix(matrixDict2, sizeData, lang2Vocab)  
+    del matrixDict2
     
     return (matrixLang1, matrixLang2)
     
@@ -102,4 +119,3 @@ def get_datasets(trFile, valFile):
     datasets.append(get_parallel_cooccurence_arrays(valFile, lang1Vocab, lang2Vocab, sizeValData))
     
     return datasets
-    
