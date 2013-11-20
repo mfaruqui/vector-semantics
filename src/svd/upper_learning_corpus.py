@@ -4,6 +4,7 @@ import json
 import sys
 import re
 import time
+import heapq
 
 from math import sqrt
 from math import log
@@ -22,6 +23,10 @@ def normalize_word(word):
        return '---num---'
     else:
        return word
+
+def nth_largest_freq(n, array):
+
+    return heapq.nlargest(n, array)[-1]
 
 def convert_triangular_dict_to_csc_matrix(contextDict, rowLen, rowSum, diagSum):
 
@@ -107,15 +112,18 @@ class LearningCorpus:
         sys.stderr.write("Time taken to compute vocab (secs): "+str(time.time()-startTime)+"\n")
         sys.stderr.write("VocabLen: "+str(len(vocab))+"\n")
 
+        freqLargest = nth_largest_freq(50, [val[1] for val in vocab.itervalues()])
+
         if self.rowCutoff > 0:
             index = 0
             for word in vocab.keys():
-                if vocab[word][1] < self.rowCutoff:
+                #delete word below or above a threshold and also words composed of only punctuation marks
+                if vocab[word][1] < self.rowCutoff or vocab[word][1] >= freqLargest or re.sub(r'\W+', '', word) == '':
                     del vocab[word]
                 else:
                     vocab[word] = [index, vocab[word][1]]
                     index += 1
-            sys.stderr.write("\nAfter truncating elements with "+str(self.rowCutoff)+" frequency, numRows: "+str(len(vocab))+"\n")
+            sys.stderr.write("\nAfter truncating elements with "+str(self.rowCutoff)+" frequency (also top 100), vocabLen: "+str(len(vocab))+"\n")
         
         return vocab
         

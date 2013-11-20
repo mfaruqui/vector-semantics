@@ -18,7 +18,7 @@ if __name__=='__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--inputfile", type=str, default=None, help="Raw corpus file name")
-    parser.add_argument("-m", "--matrixfile", type=str, default=None, help="Matrix file name")
+    parser.add_argument("-v", "--matrixfile", type=str, default=None, help="Matrix file name")
     parser.add_argument("-d", "--dictfile", type=str, help="Dictionary file name")
     parser.add_argument("-c", "--colcutoff", type=int, default=10, help="Min frequency for a word to be a feature")
     parser.add_argument("-r", "--rowcutoff", type=int, default=0, help="Min frequency for a word to be a row")
@@ -71,7 +71,7 @@ if __name__=='__main__':
         svdContextMat = np.dot(ut.T, np.diag(s))
 
         sys.stderr.write('Writing down the vectors\n')
-        outFile = open(args.outputfile+'_vec', 'w')
+        outFile = open(args.outputfile, 'w')
         for word, [wordId, freq] in test.vocab.iteritems():
             try:
                 outFile.write(word.encode('utf-8')+' ')
