@@ -32,11 +32,11 @@ def grad_word(word, contextWords, wordVectors, vocab):
     return sum([wordVectors[vocab[contextWord][0]] for contextWord in contextWords])    
 
 # Select words that are not in the given list of words
-def get_noise_words(contextWords, numNoiseWords, vocab):
+def get_noise_words(contextWords, numNoiseWords, vocabList):
     
     noiseWords = []
     while len(noiseWords) != numNoiseWords:
-        randomWord = random.choice(vocab.keys()) 
+        randomWord = random.choice(vocabList) 
         if randomWord not in contextWords: 
             noiseWords.append(randomWord)
         

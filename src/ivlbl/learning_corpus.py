@@ -22,6 +22,7 @@ class LearningCorpus:
         self.vectorLen = numDimensions
         self.corpusName = corpusFileName
         self.vocab = self.get_vocab()
+        self.vocabList = self.vocab.keys() #to select random words by index, find a cleaner way
         self.noiseDist = self.get_noise_distribution()
         self.wordVectors = random_array(len(self.vocab), self.vectorLen)
         self.wordBiases = random_array(len(self.vocab))
@@ -74,7 +75,7 @@ class LearningCorpus:
         
     def update_word_vectors(self, words, learningRate):
         
-        noiseWords = get_noise_words(words, self.numNoisySamples, self.vocab)
+        noiseWords = get_noise_words(words, self.numNoisySamples, self.vocabList)
         for i, word in enumerate(words):
             if i < self.windowSize: contextWords = words[0:i] + words[i+1:i+self.windowSize+1]
             else: contextWords = words[i-self.windowSize:i] + words[i+1:i+self.windowSize+1]
