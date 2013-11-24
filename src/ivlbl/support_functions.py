@@ -24,17 +24,22 @@ def normalize_word(word):
 # vocab = {word:[index, freq], ...}    
 def create_vocab(fileName):
     
-    vocab, wordId = ({}, 0)
+    vocab, word2norm, wordId = ({}, {}, 0)
     for line in get_file_object(fileName):
         for word in line.split():
-            word = normalize_word(word)
+            if word not in word2norm: 
+                word2norm[word] = normalize_word(word)
+                word = word2norm[word]
+            else:
+                word = word2norm[word]
+                
             if word in vocab:
                 vocab[word][1] += 1
             else:
                 vocab[word] = [wordId, 1]
                 wordId += 1
                 
-    return vocab
+    return (vocab, word2norm)
     
 # vocab = {word:[index, freq], ...}
 def filter_and_reindex(vocab, thresh):
@@ -73,9 +78,12 @@ def normalize_array(array):
 def random_array(row, col=None):
     
     if col == None:
-        #return normalize_array(numpy.array(random.sample(xrange(1000*row), row)))
         return normalize_array(numpy.array([random.uniform(0, 1) for i in range(row)]))
     else:
-        #return numpy.array([normalize_array(numpy.array(random.sample(xrange(1000*col), col))) for j in range(row)])
         return numpy.array([normalize_array(numpy.array([random.uniform(0, 1) for i in range(col)])) for j in range(row)])
         
+def get_words_to_update(numWords, contextWords):
+    
+    if contextWords == []: return []
+    else: return [random.choice(contextWords) for i in range(numWords)]
+    

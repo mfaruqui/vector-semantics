@@ -13,12 +13,17 @@ def score_word_pair(wordVector, contextWordVector, contextWordBias):
 
 def score_word_in_context(word, contextWords, wordBiases, wordVectors, vocab):
     
+    # Ideally this function should be parallellized
     return sum([score_word_pair(wordVectors[vocab[word][0]], wordVectors[vocab[contextWord][0]], wordBiases[vocab[contextWord][0]]) for contextWord in contextWords])
     
 def diff_score_word_and_noise(word, contextWords, numNoiseWords, noiseDist, wordBiases, wordVectors, vocab):
     
     return score_word_in_context(word, contextWords, wordBiases, wordVectors, vocab) - math.log(numNoiseWords*noiseDist[word])
     
+def diff_score_word_and_noise(word, contextWords, numNoiseWords, noiseDist, wordBiases, wordVectors, vocab):
+    
+    return score_word_in_context(word, contextWords, wordBiases, wordVectors, vocab) - math.log(numNoiseWords*noiseDist[word])
+       
 def grad_bias(word, contextWords, wordVectors, vocab):
     
     return 1.
@@ -31,7 +36,7 @@ def grad_word(word, contextWords, wordVectors, vocab):
     
     return sum([wordVectors[vocab[contextWord][0]] for contextWord in contextWords])    
 
-# Select words that are not in the given list of words
+''' Select words that are not in the given list of words '''
 def get_noise_words(contextWords, numNoiseWords, vocabList):
     
     noiseWords = []
@@ -41,4 +46,3 @@ def get_noise_words(contextWords, numNoiseWords, vocabList):
             noiseWords.append(randomWord)
         
     return noiseWords
-    
