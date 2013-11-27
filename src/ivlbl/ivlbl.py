@@ -13,17 +13,12 @@ def score_word_pair(wordVector, contextWordVector, contextWordBias):
 
 def score_word_in_context(word, contextWords, wordBiases, wordVectors, vocab):
     
-    # Ideally this function should be parallellized
     return sum([score_word_pair(wordVectors[vocab[word][0]], wordVectors[vocab[contextWord][0]], wordBiases[vocab[contextWord][0]]) for contextWord in contextWords])
     
 def diff_score_word_and_noise(word, contextWords, numNoiseWords, noiseDist, wordBiases, wordVectors, vocab):
     
     return score_word_in_context(word, contextWords, wordBiases, wordVectors, vocab) - math.log(numNoiseWords*noiseDist[word])
-    
-def diff_score_word_and_noise(word, contextWords, numNoiseWords, noiseDist, wordBiases, wordVectors, vocab):
-    
-    return score_word_in_context(word, contextWords, wordBiases, wordVectors, vocab) - math.log(numNoiseWords*noiseDist[word])
-       
+
 def grad_bias(word, contextWords, wordVectors, vocab):
     
     return 1.
@@ -46,3 +41,19 @@ def get_noise_words(contextWords, numNoiseWords, vocabList):
             noiseWords.append(randomWord)
         
     return noiseWords
+    
+def get_log_likelihood(fileName, wordVectors, wordBiases, wordVocab, word2norm, windowSize):
+    
+    score = 0.
+    for line in open(fileName, 'r'):
+        words = [word2norm[word] for word in line.strip().split()]
+        
+        for i, word in enumerate(words):
+            if i < windowSize: contextWords = words[0:i] + words[i+1:i+windowSize+1]
+            else: contextWords = words[i-windowSize:i] + words[i+1:i+windowSize+1]
+            
+            wordContextScore = score_word_in_context(word, contextWords, wordBiases, wordVectors, wordVocab)
+            score += wordContextScore
+            
+    return score
+    

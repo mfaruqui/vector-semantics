@@ -60,7 +60,7 @@ def print_vectors(vocab, wordVectors, outFileName):
     outFile = open(outFileName, 'w')
     
     # Sort the frequency by frequency and then print the vectors in that order
-    for word, values in sorted(vocab.items(), key=itemgetter(1, 1), reverse=False):
+    for word, values in sorted(vocab.items(), key=itemgetter(1, 1), reverse=True):
         index, freq = (values[0], values[1])
         outFile.write(word.encode('utf-8')+' ')
         for val in wordVectors[index]:
@@ -86,4 +86,3 @@ def get_words_to_update(numWords, contextWords):
     
     if contextWords == []: return []
     else: return [random.choice(contextWords) for i in range(numWords)]
-    

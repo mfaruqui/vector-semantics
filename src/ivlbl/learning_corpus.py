@@ -3,30 +3,28 @@ import numpy
 import sys
 import time
 import multiprocessing
+import math
 
 from itertools import repeat
 
 from ivlbl import grad_bias, grad_context_word, grad_word
 from ivlbl import diff_score_word_and_noise, get_noise_words
-from ivlbl import logistic
+from ivlbl import logistic, get_log_likelihood
 
 from support_functions import create_vocab, filter_and_reindex
-from support_functions import normalize_word
-from support_functions import random_array
-from support_functions import get_file_object, get_words_to_update
+from support_functions import normalize_word, random_array
+from support_functions import get_file_object
 
-'''
-To be fixed: 
-learningRate parameter
-'''
+SMOOTHING = math.pow(10, -20)
 
 class LearningCorpus:
     
-    def __init__(self, rowCutoff, windowSize, numNoisySamples, numDimensions, corpusFileName):
+    def __init__(self, rowCutoff, windowSize, numNoisySamples, numDimensions, learningRate, corpusFileName):
         
         self.rowCutoff = rowCutoff
         self.windowSize = windowSize
         self.numNoisySamples = numNoisySamples
+        self.learningRate = learningRate
         self.vectorLen = numDimensions
         self.corpusName = corpusFileName
         self.vocab, self.word2norm = self.get_vocab()
@@ -34,6 +32,8 @@ class LearningCorpus:
         self.noiseDist = self.get_noise_distribution()
         self.wordVectors = random_array(len(self.vocab), self.vectorLen)
         self.wordBiases = random_array(len(self.vocab))
+        self.adagradVecMem = SMOOTHING*numpy.ones((len(self.vocab), self.vectorLen))
+        self.adagradBiasMem = SMOOTHING*numpy.ones(len(self.vocab))
         self.train_on_corpus()
             
     def get_vocab(self):
@@ -60,34 +60,34 @@ class LearningCorpus:
         numIterations = 1
         for i in range(numIterations):
             startTime = time.time()
-            learningRate = 0.5/(i+1)
-            sys.stderr.write('\nIteration: '+str(i+1)+'\n')
-            self.train_word_vectors(learningRate)
-            sys.stderr.write('\nTime taken: '+str(time.time()-startTime)+' secs\n')
+            rate = self.learningRate/(i+1)
+            sys.stderr.write('\nIteration: '+str(i+1))
+            sys.stderr.write('\nLearning rate: '+str(rate)+'\n')
+            self.train_word_vectors(rate)
+            #sys.stderr.write('\nTime taken: '+str(time.time()-startTime)+' secs\n')
+            logLikelihood = get_log_likelihood(self.corpusName, self.wordVectors, self.wordBiases, self.vocab, self.word2norm, self.windowSize)
+            sys.stderr.write('\nLog likelihood: '+str(logLikelihood))
             
         return
         
-    def train_word_vectors(self, learningRate):
+    def train_word_vectors(self, rate):
         
-        window, numWords = ([], 0)
         sys.stderr.write("Processing words:\n")
-        startTime = time.time()
-        
-        printIf = 100000
+        numWords, printIf = (0, 500000)
         for line in get_file_object(self.corpusName):
             words = [self.word2norm[word] for word in line.strip().split() if self.word2norm[word] in self.vocab]
-            self.update_word_vectors(words, learningRate)
+            self.update_word_vectors(words, rate)
             numWords += len(words)
             if numWords > printIf:
                 sys.stderr.write(str(printIf)+' ')
-                printIf += 100000
+                printIf += 500000
             
         return
         
-    def update_word_vectors(self, words, learningRate):
+    def update_word_vectors(self, words, rate):
         
         noiseWords = get_noise_words(words, self.numNoisySamples, self.vocabList)
-        #numWordsToBeUpdated = min(1, len(words))
+        batchUpdates = {}
         for i, word in enumerate(words):
             if i < self.windowSize: contextWords = words[0:i] + words[i+1:i+self.windowSize+1]
             else: contextWords = words[i-self.windowSize:i] + words[i+1:i+self.windowSize+1]
@@ -98,19 +98,39 @@ class LearningCorpus:
             # Update in all contextWord vectors and biases is same for all context words
             updateInContextWordBias = 1-wordContextScore-sum(noiseScores)
             updateInContextWordVector = (1-wordContextScore)*grad_context_word(word, contextWords, self.wordVectors, self.vocab) - \
-                                sum([noiseScores[i]*grad_context_word(noiseWord, contextWords, self.wordVectors, self.vocab) for i, noiseWord in enumerate(noiseWords)])
+                                sum([noiseScores[j]*grad_context_word(noiseWord, contextWords, self.wordVectors, self.vocab) for j, noiseWord in enumerate(noiseWords)])
             
-            #self.add_gradient_to_words(get_words_to_update(numWordsToBeUpdated, contextWords), updateInContextWordVector, updateInContextWordBias, learningRate)
             for contextWord in contextWords:
-                self.wordVectors[self.vocab[contextWord][0]] += learningRate * updateInContextWordVector
-                self.wordBiases[self.vocab[contextWord][0]] += learningRate * updateInContextWordBias
+                wordIndex = self.vocab[contextWord][0]
+                if contextWord not in batchUpdates: 
+                    batchUpdates[wordIndex] = [updateInContextWordVector, updateInContextWordBias, 1.]
+                else: 
+                    batchUpdates[wordIndex][0] += updateInContextWordVector
+                    batchUpdates[wordIndex][1] += updateInContextWordBias
+                    batchUpdates[wordIndex][2] += 1.
+        
+        self.add_gradient_to_words_adagrad(batchUpdates, rate)
                 
         return
         
-    def add_gradient_to_words(self, words, vectorUpdate, biasUpdate, learningRate):
+    def add_gradient_to_words_sgd(self, batchUpdates, rate):
         
-        for word in words:
-            self.wordVectors[self.vocab[word][0]] += learningRate * vectorUpdate
-            self.wordBiases[self.vocab[word][0]] += learningRate * biasUpdate
+        for wordIndex in batchUpdates.iterkeys():
+            self.wordVectors[wordIndex] += (rate/batchUpdates[wordIndex][2]) * batchUpdates[wordIndex][0]
+            self.wordBiases[wordIndex] += (rate/batchUpdates[wordIndex][2]) * batchUpdates[wordIndex][1]
+            
+        return
         
+    def add_gradient_to_words_adagrad(self, batchUpdates, learningRate):
+        
+        for wordIndex in batchUpdates.iterkeys():
+            
+            # Update the adagrad history -- using the average update
+            self.adagradVecMem[wordIndex] += numpy.square(batchUpdates[wordIndex][0]/batchUpdates[wordIndex][2])
+            self.adagradBiasMem[wordIndex] += numpy.square(batchUpdates[wordIndex][1]/batchUpdates[wordIndex][2])
+            
+            # Update the parameters
+            self.wordVectors[wordIndex] += learningRate * numpy.divide(batchUpdates[wordIndex][0], numpy.sqrt(self.adagradVecMem[wordIndex]))
+            self.wordBiases[wordIndex] += learningRate * batchUpdates[wordIndex][1]/numpy.sqrt(self.adagradBiasMem[wordIndex])
+            
         return
