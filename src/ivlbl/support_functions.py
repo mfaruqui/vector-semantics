@@ -56,7 +56,7 @@ def filter_and_reindex(vocab, thresh):
     
 def print_vectors(vocab, wordVectors, outFileName):
     
-    sys.stderr.write('Writing down the vectors in '+outFileName+'\n')
+    sys.stderr.write('\nWriting down the vectors in '+outFileName+'\n')
     outFile = open(outFileName, 'w')
     
     # Sort the frequency by frequency and then print the vectors in that order

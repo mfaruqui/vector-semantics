@@ -42,11 +42,11 @@ def get_noise_words(contextWords, numNoiseWords, vocabList):
         
     return noiseWords
     
-def get_log_likelihood(fileName, wordVectors, wordBiases, wordVocab, word2norm, windowSize):
+def get_unnormalized_score(fileName, wordVectors, wordBiases, wordVocab, word2norm, windowSize):
     
     score = 0.
     for line in open(fileName, 'r'):
-        words = [word2norm[word] for word in line.strip().split()]
+        words = [word2norm[word] for word in line.strip().split() if word2norm[word] in wordVocab]
         
         for i, word in enumerate(words):
             if i < windowSize: contextWords = words[0:i] + words[i+1:i+windowSize+1]
@@ -56,4 +56,3 @@ def get_log_likelihood(fileName, wordVectors, wordBiases, wordVocab, word2norm, 
             score += wordContextScore
             
     return score
-    
