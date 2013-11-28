@@ -51,7 +51,7 @@ class LearningCorpus:
 
         if self.freqCutoff > 1:
             vocab = filter_and_reindex(vocab, self.freqCutoff)
-            sys.stderr.write("\nAfter truncating elements with "+str(self.rowCutoff)+" frequency, vocabLen: "+str(len(vocab)))
+            sys.stderr.write("\nAfter truncating elements with "+str(self.freqCutoff)+" frequency, vocabLen: "+str(len(vocab)))
         
         return vocab, word2norm
         
