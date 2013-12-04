@@ -20,5 +20,4 @@ if __name__=='__main__':
 
     learner = LearningCorpus(args.freqcutoff, args.window, args.noise, args.numdim, args.inputfile)
     learner.train_on_corpus(args.numiterations, args.learningrate)
-    print_vectors(learner.vocab, learner.targetWordVectors, args.outputfile+'_target')
-    print_vectors(learner.vocab, learner.contextWordVectors, args.outputfile+'_context')
+    print_vectors(learner.vocab, learner.wordVectors, args.outputfile)

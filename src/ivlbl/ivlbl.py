@@ -7,17 +7,17 @@ def logistic(val):
     elif val < -20: return 0.
     else: return 1./(1+math.exp(-1*val))
 
-def score_word_pair(targetWordVector, contextWordVector, contextWordBias):
+def score_word_pair(wordVector, contextWordVector, contextWordBias):
     
-    return sum(targetWordVector * contextWordVector) + contextWordBias
+    return sum(wordVector * contextWordVector) + contextWordBias
 
-def score_word_in_context(word, contextWords, contextWordBiases, contextWordVectors, targetWordVectors, vocab):
+def score_word_in_context(word, contextWords, wordBiases, wordVectors, vocab):
     
-    return sum([score_word_pair(targetWordVectors[vocab[word][0]], contextWordVectors[vocab[contextWord][0]], contextWordBiases[vocab[contextWord][0]]) for contextWord in contextWords])
+    return sum([score_word_pair(wordVectors[vocab[word][0]], wordVectors[vocab[contextWord][0]], wordBiases[vocab[contextWord][0]]) for contextWord in contextWords])
     
-def diff_score_word_and_noise(word, contextWords, numNoiseWords, noiseDist, contextWordBiases, contextWordVectors, targetWordVectors, vocab):
+def diff_score_word_and_noise(word, contextWords, numNoiseWords, noiseDist, wordBiases, wordVectors, vocab):
     
-    return score_word_in_context(word, contextWords, contextWordBiases, contextWordVectors, targetWordVectors, vocab) - math.log(numNoiseWords*noiseDist[word])
+    return score_word_in_context(word, contextWords, wordBiases, wordVectors, vocab) - math.log(numNoiseWords*noiseDist[word])
 
 def grad_bias(word, contextWords, wordVectors, vocab):
     
@@ -27,7 +27,7 @@ def grad_context_word(word, contextWords, wordVectors, vocab):
     
     return wordVectors[vocab[word][0]]
     
-def grad_target_word(word, contextWords, wordVectors, vocab):
+def grad_word(word, contextWords, wordVectors, vocab):
     
     return sum([wordVectors[vocab[contextWord][0]] for contextWord in contextWords])    
 
