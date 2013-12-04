@@ -9,7 +9,7 @@ from itertools import repeat
 
 from ivlbl import grad_bias, grad_context_word, grad_word
 from ivlbl import diff_score_word_and_noise, get_noise_words
-from ivlbl import logistic, get_unnormalized_score
+from ivlbl import logistic, get_unnormalized_score, get_loglikelihood
 
 from support_functions import create_vocab, filter_and_reindex
 from support_functions import normalize_word, random_array
@@ -62,8 +62,8 @@ class LearningCorpus:
             sys.stderr.write('\nLearning rate: '+str(rate))
             self.train_word_vectors(rate)
             sys.stderr.write('\nTime taken: '+str(time.time()-startTime)+' secs')
-            #logLikelihood = get_unnormalized_score(self.corpusName, self.wordVectors, self.wordBiases, self.vocab, self.word2norm, self.windowSize)
-            #sys.stderr.write('\nUnnorm score: '+str(logLikelihood))
+            #logLikelihood = get_loglikelihood(self.corpusName, self.wordVectors, self.wordBiases, self.vocab, self.word2norm, self.windowSize)
+            #sys.stderr.write('\nLL: '+str(logLikelihood))
             
         return
         
