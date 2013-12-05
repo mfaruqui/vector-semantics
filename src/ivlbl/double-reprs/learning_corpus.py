@@ -111,7 +111,7 @@ class LearningCorpus:
             # Update the cache of updates for context words
             for contextWord in contextWords:
                 wordIndex = self.vocab[contextWord][0]
-                if contextWord not in batchUpdatesContext: 
+                if wordIndex not in batchUpdatesContext: 
                     batchUpdatesContext[wordIndex] = [updateInContextWordVector, updateInContextWordBias, 1.]
                 else: 
                     batchUpdatesContext[wordIndex][0] += updateInContextWordVector
