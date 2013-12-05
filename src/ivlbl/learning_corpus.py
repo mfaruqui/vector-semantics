@@ -99,7 +99,7 @@ class LearningCorpus:
 
             for contextWord in contextWords:
                 wordIndex = self.vocab[contextWord][0]
-                if contextWord not in batchUpdates: 
+                if wordIndex not in batchUpdates: 
                     batchUpdates[wordIndex] = [updateInContextWordVector, updateInContextWordBias, 1.]
                 else: 
                     batchUpdates[wordIndex][0] += updateInContextWordVector
@@ -122,7 +122,7 @@ class LearningCorpus:
         
         for wordIndex in batchUpdates.iterkeys():
             
-            # Average the updates indidvidually for every word; Upgrade the adagrad history
+            # Average the updates individually for every word; Upgrade the adagrad history
             self.adagradVecMem[wordIndex] += numpy.square(batchUpdates[wordIndex][0]/batchUpdates[wordIndex][2])
             self.adagradBiasMem[wordIndex] += numpy.square(batchUpdates[wordIndex][1]/batchUpdates[wordIndex][2])
             
