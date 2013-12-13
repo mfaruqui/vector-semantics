@@ -17,9 +17,9 @@ typedef std::tr1::unordered_map<unsigned int, unsigned int> mapUintUint;
 
 float logistic(float val){
     
-    if (val > 20) return 1.;
+    if (val > 20) return 1;
     else if (val < -20) return 0.;
-    else return 1./(1+exp(-1*val));
+    else return 1/(1+exp(-1*val));
 }
 
 float score_word_pair(vector<float>& wordVector, vector<float>& contextWordVector, float contextWordBias){

@@ -13,7 +13,7 @@ typedef std::tr1::unordered_map<string, unsigned int> mapStrUint;
 typedef std::tr1::unordered_map<string, string> mapStrStr;
 typedef std::tr1::unordered_map<unsigned int, float> mapUintFloat;
 
-float EPSILON = 0.000001;
+float EPSILON = 0.00000000000000000001;
 
 void lower_string(string& word){
     

@@ -4,6 +4,7 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <tr1/unordered_map>
 
 using namespace std;
 typedef std::tr1::unordered_map<string, unsigned int> mapStrUint;

@@ -107,9 +107,9 @@ vector<float> vec_prod(vector<float>& a, const float b){
 
 vector<float> vec_square(vector<float>& a){
     
-    vector<float> result(a.size());
+    vector<float> result;
     for(int i=0; i<a.size(); i++)
-        result[i] = pow(a[i], 2);
+        result.push_back(pow(a[i], 2));
     
     return result;
 }
