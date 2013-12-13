@@ -10,8 +10,10 @@
 
 using namespace std;
 typedef std::tr1::unordered_map<string, unsigned int> mapStrUint;
+typedef std::tr1::unordered_map<string, string> mapStrStr;
 typedef std::tr1::unordered_map<unsigned int, float> mapUintFloat;
-typedef std::tr1::unordered_map<unsigned int, unsigned int> mapUintUint;
+
+float EPSILON = 0.000001;
 
 void lower_string(string& word){
     
@@ -34,7 +36,7 @@ string normalize_word(string& word){
     
 }
 
-vector<string> &split(string &s, char delim, vector<string> &elems) {
+vector<string> &split(string &s, char delim, vector<string>& elems) {
     
     std::stringstream ss(s);
     std::string item;
@@ -55,26 +57,31 @@ vector<string> split_line(string& line, char delim) {
     return words;
 }
 
-mapStrUint get_vocab(char* filename){
+pair<mapStrUint, mapStrStr> get_vocab(char* filename){
     
-    string line;
+    string line, normWord;
     vector<string> words;
     mapStrUint vocab;
+    mapStrStr word2norm;
     
     ifstream myfile(filename);
     
     if (myfile.is_open()) {
         while(getline(myfile, line)) {
             words = split_line(line, ' ');
-            for(int i=0; i<words.size(); i++)
-                vocab[normalize_word(words[i])]++;
+            for(int i=0; i<words.size(); i++){
+                normWord = normalize_word(words[i]);
+                if (word2norm.find(words[i]) == word2norm.end())
+                    word2norm[words[i]] = normWord;
+                vocab[normWord]++;
+            }
         }
         myfile.close();
     }
     else
         cout << "Unable to open file";
     
-    return vocab;
+    return make_pair(vocab, word2norm);
 }
 
 void filter_vocab(mapStrUint& vocab, const int freqCutoff){
@@ -127,6 +134,14 @@ void print_map(mapUintFloat& vocab){
     return;
 }
 
+void print_map(mapStrStr& vocab){
+    
+    for (mapStrStr::iterator it = vocab.begin(); it != vocab.end(); ++it) 
+        cout << it->first << " " << it->second << "\n";
+    
+    return;
+}
+
 void normalize_vector(vector<float>& vec){
 
     float magnitude = 0;
@@ -138,6 +153,22 @@ void normalize_vector(vector<float>& vec){
     std::transform(vec.begin(), vec.end(), vec.begin(), std::bind1st(std::multiplies<float>(),1/magnitude));
     
     return;
+}
+
+vector<vector<float> > epsilon_vector(unsigned int row, unsigned int col){
+
+    vector<vector<float> > epsilonVec;
+    vector<float> vec(col, EPSILON);
+    for (int i=0; i<row; i++)
+        epsilonVec.push_back(vec);
+    
+    return epsilonVec;
+}
+
+vector<float> epsilon_vector(unsigned int row){
+
+    vector<float> nonZeroVec(row, EPSILON);
+    return nonZeroVec;
 }
 
 vector<float> random_vector(const unsigned int length){
@@ -162,4 +193,17 @@ vector<vector<float> > random_vector(unsigned int row, unsigned int col){
     }
     
     return randVec;
+}
+
+void print_vectors(char* fileName, vector<vector<float> >& wordVectors, mapStrUint& indexedVocab){
+
+    ofstream outFile(fileName);
+    for (mapStrUint::iterator it=indexedVocab.begin(); it!= indexedVocab.end(); it++){
+        outFile << it->first << " ";
+        for (int i=0; i != wordVectors[it->second].size(); i++)
+            outFile << wordVectors[it->second][i] << " ";
+        outFile << "\n";
+    }
+    
+    return;
 }

@@ -61,13 +61,15 @@ vector<float> grad_word(unsigned int word, vector<unsigned int>& contextWords, v
     return sumVec;
 }
 
-vector<unsigned int> get_noise_words(mapUintUint& contextWords, int numNoiseWords, unsigned int vocabSize){
+// Can be made better by using a map
+vector<unsigned int> get_noise_words(vector<unsigned int>& contextWords, int numNoiseWords, unsigned int vocabSize){
 
     vector<unsigned int> noiseWords(numNoiseWords, -1);
     unsigned int selectedWords = 0, randIndex;
     while (selectedWords != numNoiseWords){
         randIndex = rand() % vocabSize;
-        if (contextWords.find(randIndex) == contextWords.end())
+        //if (contextWords.find(randIndex) == contextWords.end())
+        if (find(contextWords.begin(), contextWords.end(), randIndex) == contextWords.end())
             noiseWords[selectedWords++] = randIndex;
     }
     

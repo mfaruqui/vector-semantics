@@ -21,9 +21,9 @@ float score_word_in_context(unsigned int word, vector<unsigned int>& contextWord
 float diff_score_word_and_noise(unsigned int word, vector<unsigned int>& contextWords, int numNoiseWords, mapUintFloat& noiseDist, vector<float>& wordBiases, vector<vector<float> >& wordVectors);
 
 float grad_bias(unsigned int word, vector<unsigned int>& contextWords, vector<vector<float> >& wordVectors);
-vector<float> grad_context_word(unsigned int word, vector<unsigned int>& contextWords, vector<vector<float> >& wordVectors, mapStrUint& vocabIndex);
-vector<float> grad_word(unsigned int word, vector<unsigned int>& contextWords, vector<vector<float> >& wordVectors, mapStrUint& vocabIndex);
+vector<float> grad_context_word(unsigned int word, vector<unsigned int>& contextWords, vector<vector<float> >& wordVectors);
+vector<float> grad_word(unsigned int word, vector<unsigned int>& contextWords, vector<vector<float> >& wordVectors);
 
-vector<unsigned int> get_noise_words(mapUintUint& contextWords, int numNoiseWords, unsigned int vocabSize);
+vector<unsigned int> get_noise_words(vector<unsigned int>& contextWords, int numNoiseWords, unsigned int vocabSize);
 
 #endif
