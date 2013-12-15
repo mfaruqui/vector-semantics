@@ -1,11 +1,12 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
+#include <Eigen/Core>
 #include "utils.h"
-#include "vecops.h"
 #include "ivlbl.h"
 
 using namespace std;
+using namespace Eigen;
 
 vector<unsigned int> words_in_window(vector<unsigned int>& words, unsigned int wordIndex, unsigned int windowSize){
     
@@ -30,31 +31,30 @@ vector<unsigned int> words_in_window(vector<unsigned int>& words, unsigned int w
     return wordsInWindow;
 }
 
-void add_grad_to_words_adagrad(vector<unsigned int>& contextWords, float rate, vector<float>& updateVec, 
-                                float updateBias, vector<vector<float> >& adagradVecMem, vector<float>& adagradBiasMem,
-                                vector<vector<float> >& wordVectors, vector<float>& wordBiases){
+void add_grad_to_words_adagrad(vector<unsigned int>& contextWords, float rate, RowVectorXf& updateVec, 
+                                float updateBias, vector<RowVectorXf>& adagradVecMem, RowVectorXf& adagradBiasMem,
+                                vector<RowVectorXf>& wordVectors, RowVectorXf& wordBiases){
     
     for(int i=0; i<contextWords.size(); i++){
         
         unsigned int word = contextWords[i];
+        RowVectorXf temp;
         
         // Update the adagrad memory first 
-        vec_plus_equal(adagradVecMem[word], vec_square(updateVec));
+        temp = updateVec.array().square();
+        adagradVecMem[word] += temp;
         adagradBiasMem[word] += pow(updateBias, 2);
         
         // Now apply the updates
-        // This: wordVectors[word] += rate * updateVec / sqrt(adagradVecMem[word])
-        vec_div_equal(updateVec, vec_sqrt(adagradVecMem[word]));
-        vec_prod_equal(updateVec, rate);
-        vec_plus_equal(wordVectors[word], updateVec);
-        
+        temp = adagradVecMem[word].array().sqrt();
+        wordVectors[word] += rate * updateVec.cwiseQuotient(temp);
         wordBiases[word] += rate * updateBias / sqrt(adagradBiasMem[word]);
     }
     return;
 }
 
-void train_word_vectors(vector<unsigned int>& words, vector<vector<float> >& wordVectors, vector<float>& wordBiases,
-                        vector<vector<float> >& adagradVecMem, vector<float>& adagradBiasMem,
+void train_word_vectors(vector<unsigned int>& words, vector<RowVectorXf>& wordVectors, RowVectorXf& wordBiases,
+                        vector<RowVectorXf>& adagradVecMem, RowVectorXf& adagradBiasMem,
                         mapUintFloat& noiseDist, unsigned int numNoiseWords, unsigned int vocabSize,
                         unsigned int windowSize, float rate){
 
@@ -62,28 +62,27 @@ void train_word_vectors(vector<unsigned int>& words, vector<vector<float> >& wor
     unsigned int word, noiseWord;
     vector<unsigned int> contextWords;
     
-    float wordContextScore, updateInContextBias, noiseScore;
-    vector<float> noiseScores, updateInContextVec, noiseScoreGradProd(wordVectors[0].size(), 0), temp;
-    
+    float wordContextScore, updateInContextBias, noiseScore, noiseScoreSum;
+    RowVectorXf updateInContextVec, noiseScoreGradProd(wordVectors[0].size()), temp;
     
     for (int i=0; i<words.size(); i++){
         
+        noiseScoreSum = 0;
+        noiseScoreGradProd.setZero(noiseScoreGradProd.size());
         word = words[i];
+        
         contextWords = words_in_window(words, i, windowSize);
         wordContextScore = logistic(diff_score_word_and_noise(word, contextWords, numNoiseWords, noiseDist, wordBiases, wordVectors));
         
         for (int j=0; j<noiseWords.size(); j++){
             noiseWord = noiseWords[j];
             noiseScore = logistic(diff_score_word_and_noise(noiseWord, contextWords, numNoiseWords, noiseDist, wordBiases, wordVectors));
-            noiseScores.push_back(noiseScore);
-            temp = grad_context_word(noiseWord, contextWords, wordVectors);
-            vec_plus_equal(noiseScoreGradProd, vec_prod(temp, noiseScore));
+            noiseScoreSum += noiseScore;
+            noiseScoreGradProd += noiseScore * grad_context_word(noiseWord, contextWords, wordVectors);
         }
                                                         
-        updateInContextBias = 1 - wordContextScore - accumulate(noiseScores.begin(), noiseScores.end(), 0);
-        temp = grad_context_word(word, contextWords, wordVectors);
-        vec_prod_equal(temp, 1 - wordContextScore);
-        updateInContextVec = vec_plus(temp, noiseScoreGradProd);
+        updateInContextBias = 1 - wordContextScore - noiseScoreSum;
+        updateInContextVec = (1 - wordContextScore) * grad_context_word(word, contextWords, wordVectors) - noiseScoreGradProd;
         
         add_grad_to_words_adagrad(contextWords, rate, updateInContextVec, updateInContextBias, 
                                     adagradVecMem, adagradBiasMem, wordVectors, wordBiases);
@@ -92,7 +91,7 @@ void train_word_vectors(vector<unsigned int>& words, vector<vector<float> >& wor
     return;   
 }
 
-pair<vector<vector<float> >, mapStrUint> train_on_corpus(char* fileName, unsigned int numIter, float learningRate, 
+pair<vector<RowVectorXf>, mapStrUint> train_on_corpus(char* fileName, unsigned int numIter, float learningRate, 
                                         unsigned int numNoiseWords, unsigned int windowSize, unsigned int freqCutoff,
                                         unsigned int vecLen){
     
@@ -106,13 +105,16 @@ pair<vector<vector<float> >, mapStrUint> train_on_corpus(char* fileName, unsigne
     vocab = vocabPair.first;
     word2norm = vocabPair.second;
     
+    cerr << vocab.size() << " ";
     filter_vocab(vocab, freqCutoff);
+    cerr << vocab.size() << " ";
     indexedVocab = reindex_vocab(vocab);
+    cerr << indexedVocab.size() << " ";
     noiseDist = get_unigram_dist(vocab, indexedVocab);
     vocabSize = indexedVocab.size();
     
-    vector<vector<float> > wordVectors = random_vector(vocabSize, vecLen), adagradVecMem = epsilon_vector(vocabSize, vecLen);
-    vector<float> wordBiases = random_vector(vocabSize), adagradBiasMem = epsilon_vector(vocabSize);
+    vector<RowVectorXf> wordVectors = random_vector(vocabSize, vecLen), adagradVecMem = epsilon_vector(vocabSize, vecLen);
+    RowVectorXf wordBiases = random_vector(vocabSize), adagradBiasMem = epsilon_vector(vocabSize);
     
     for(int i=0; i<numIter; i++){
         

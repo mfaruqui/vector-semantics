@@ -7,8 +7,11 @@
 #include <tr1/unordered_map>
 #include <map>
 #include <cmath>
+#include <Eigen/Core>
 
 using namespace std;
+using namespace Eigen;
+
 typedef std::tr1::unordered_map<string, unsigned int> mapStrUint;
 typedef std::tr1::unordered_map<string, string> mapStrStr;
 typedef std::tr1::unordered_map<unsigned int, float> mapUintFloat;
@@ -84,11 +87,18 @@ pair<mapStrUint, mapStrStr> get_vocab(char* filename){
     return make_pair(vocab, word2norm);
 }
 
+/* 
+It is not deleting stuff, dont know why !
+while printing its still there ! x-(
+http://stackoverflow.com/questions/17036428/c-map-element-doesnt-get-erased-if-i-refer-to-it
+*/
 void filter_vocab(mapStrUint& vocab, const int freqCutoff){
     
-    for (mapStrUint::iterator it = vocab.begin(); it != vocab.end(); ++it)
+    for (mapStrUint::iterator it = vocab.begin(); it != vocab.end();)
         if (it->second < freqCutoff)
-            vocab.erase(it->first);
+            vocab.erase(it++);
+        else
+            it++;
     
     return;
 }
@@ -120,7 +130,7 @@ mapUintFloat get_unigram_dist(mapStrUint& vocab, mapStrUint& indexedVocab){
 
 void print_map(mapStrUint& vocab){
     
-    for (mapStrUint::iterator it = vocab.begin(); it != vocab.end(); ++it) 
+    for (mapStrUint::iterator it = vocab.begin(); it != vocab.end(); ++it)
         cout << it->first << " " << it->second << "\n";
     
     return;
@@ -142,67 +152,62 @@ void print_map(mapStrStr& vocab){
     return;
 }
 
-void normalize_vector(vector<float>& vec){
+vector<RowVectorXf> epsilon_vector(unsigned int row, unsigned int col){
 
-    float magnitude = 0;
-    for (vector<float>::iterator it = vec.begin(); it != vec.end(); ++it)
-        magnitude += *it * *it;
-    magnitude = sqrt(magnitude);
-    
-    if (magnitude == 0) magnitude = 0.000001;
-    std::transform(vec.begin(), vec.end(), vec.begin(), std::bind1st(std::multiplies<float>(),1/magnitude));
-    
-    return;
-}
-
-vector<vector<float> > epsilon_vector(unsigned int row, unsigned int col){
-
-    vector<vector<float> > epsilonVec;
-    vector<float> vec(col, EPSILON);
+    vector<RowVectorXf> epsilonVec;
+    RowVectorXf vec(col);
+    vec.setOnes(col);
+    vec *= EPSILON;
     for (int i=0; i<row; i++)
         epsilonVec.push_back(vec);
     
     return epsilonVec;
 }
 
-vector<float> epsilon_vector(unsigned int row){
+RowVectorXf epsilon_vector(unsigned int row){
 
-    vector<float> nonZeroVec(row, EPSILON);
+    RowVectorXf nonZeroVec(row);
+    nonZeroVec.setOnes(row);
+    nonZeroVec *= EPSILON;
     return nonZeroVec;
 }
 
-vector<float> random_vector(const unsigned int length){
+RowVectorXf random_vector(const unsigned int length){
 
-    vector<float> randVec(length, 0.0);
+    RowVectorXf randVec(length);
     for (int i=0; i<randVec.size(); i++)
-        randVec.at(i) = (rand()/(double)RAND_MAX);
-    normalize_vector(randVec);
+        randVec[i] = (rand()/(double)RAND_MAX);
+    randVec /= randVec.norm();
     
     return randVec;
 }
 
-vector<vector<float> > random_vector(unsigned int row, unsigned int col){
+vector<RowVectorXf> random_vector(unsigned int row, unsigned int col){
 
-    vector<vector<float> > randVec;
-    vector<float> vec(col, 0.0);
+    vector<RowVectorXf> randVec;
+    RowVectorXf vec(col);
     for (int i=0; i<row; i++){
         for (int j=0; j<col; j++)
-            vec.at(j) = (rand()/(double)RAND_MAX);
-        normalize_vector(vec);
+            vec[j] = (rand()/(double)RAND_MAX);
+        vec /= vec.norm();
         randVec.push_back(vec);
     }
     
     return randVec;
 }
 
-void print_vectors(char* fileName, vector<vector<float> >& wordVectors, mapStrUint& indexedVocab){
+void print_vectors(char* fileName, vector<RowVectorXf>& wordVectors, mapStrUint& indexedVocab){
 
     ofstream outFile(fileName);
     for (mapStrUint::iterator it=indexedVocab.begin(); it!= indexedVocab.end(); it++){
-        outFile << it->first << " ";
-        for (int i=0; i != wordVectors[it->second].size(); i++)
-            outFile << wordVectors[it->second][i] << " ";
-        outFile << "\n";
+        // This check is wrong but I have to put, coz of the elements not getting deleted :(
+        // By this we will bem issing the word at index 0.
+        if (it->second != 0){
+            outFile << it->first << " ";
+            for (int i=0; i != wordVectors[it->second].size(); i++)
+                outFile << wordVectors[it->second][i] << " ";
+            outFile << "\n";
+        }
     }
     
     return;

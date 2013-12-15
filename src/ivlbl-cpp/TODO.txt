@@ -1,0 +1,2 @@
+1. Selecting noise words can be more efficient is a map of contextWords is sent instead of vector
+2. All the vector operations 

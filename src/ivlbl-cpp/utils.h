@@ -5,8 +5,11 @@
 #include <vector>
 #include <string>
 #include <tr1/unordered_map>
+#include <Eigen/Core>
 
 using namespace std;
+using namespace Eigen;
+
 typedef std::tr1::unordered_map<string, unsigned int> mapStrUint;
 typedef std::tr1::unordered_map<unsigned int, float> mapUintFloat;
 typedef std::tr1::unordered_map<string, string> mapStrStr;
@@ -25,12 +28,11 @@ void print_map(mapStrUint& vocab);
 void print_map(mapUintFloat& vocab);
 void print_map(mapStrStr& vocab);
 
-void normalize_vector(vector<float>& vec);
-vector<float> random_vector(const unsigned int length);
-vector<vector<float> > random_vector(unsigned int row, unsigned int col);
-vector<vector<float> > epsilon_vector(unsigned int row, unsigned int col);
-vector<float> epsilon_vector(unsigned int row);
+RowVectorXf random_vector(const unsigned int length);
+vector<RowVectorXf> random_vector(unsigned int row, unsigned int col);
+vector<RowVectorXf> epsilon_vector(unsigned int row, unsigned int col);
+RowVectorXf epsilon_vector(unsigned int row);
 
-void print_vectors(char* fileName, vector<vector<float> >& wordVectors, mapStrUint& indexedVocab);
+void print_vectors(char* fileName, vector<RowVectorXf>& wordVectors, mapStrUint& indexedVocab);
 
 #endif

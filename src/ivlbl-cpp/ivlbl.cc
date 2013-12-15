@@ -6,10 +6,11 @@
 #include <string>
 #include <algorithm>
 #include <tr1/unordered_map>
+#include <Eigen/Core>
 #include "utils.h"
-#include "vecops.h"
 
 using namespace std;
+using namespace Eigen;
 
 typedef std::tr1::unordered_map<string, unsigned int> mapStrUint;
 typedef std::tr1::unordered_map<unsigned int, float> mapUintFloat;
@@ -22,13 +23,14 @@ float logistic(float val){
     else return 1/(1+exp(-1*val));
 }
 
-float score_word_pair(vector<float>& wordVector, vector<float>& contextWordVector, float contextWordBias){
+float score_word_pair(RowVectorXf& wordVector, RowVectorXf& contextWordVector, float contextWordBias){
     
-    float innerProduct = inner_product(wordVector.begin(), wordVector.end(), contextWordVector.begin(), 0.0);
-    return  innerProduct + contextWordBias;
+    //float innerProduct = inner_product(wordVector.begin(), wordVector.end(), contextWordVector.begin(), 0.0);
+    //return  innerProduct + contextWordBias;
+    return wordVector.dot(contextWordVector) + contextWordBias;
 }
 
-float score_word_in_context(unsigned int word, vector<unsigned int>& contextWords, vector<float>& wordBiases, vector<vector<float> >& wordVectors){
+float score_word_in_context(unsigned int word, vector<unsigned int>& contextWords, RowVectorXf& wordBiases, vector<RowVectorXf>& wordVectors){
     
     float sumScore = 0;
     for (int i=0; i<contextWords.size(); i++)
@@ -37,26 +39,27 @@ float score_word_in_context(unsigned int word, vector<unsigned int>& contextWord
     return sumScore;
 }
 
-float diff_score_word_and_noise(unsigned int word, vector<unsigned int>& contextWords, int numNoiseWords, mapUintFloat& noiseDist, vector<float>& wordBiases, vector<vector<float> >& wordVectors){
+float diff_score_word_and_noise(unsigned int word, vector<unsigned int>& contextWords, int numNoiseWords, mapUintFloat& noiseDist, RowVectorXf& wordBiases, vector<RowVectorXf >& wordVectors){
     
     return score_word_in_context(word, contextWords, wordBiases, wordVectors) - log(numNoiseWords*noiseDist[word]);
 }
 
-float grad_bias(unsigned int word, vector<unsigned int>& contextWords, vector<vector<float> >& wordVectors){
+float grad_bias(unsigned int word, vector<unsigned int>& contextWords, vector<RowVectorXf >& wordVectors){
     
     return 1;
 }
 
-vector<float> grad_context_word(unsigned int word, vector<unsigned int>& contextWords, vector<vector<float> >& wordVectors){
+RowVectorXf grad_context_word(unsigned int word, vector<unsigned int>& contextWords, vector<RowVectorXf >& wordVectors){
     
     return wordVectors[word];
 }
 
-vector<float> grad_word(unsigned int word, vector<unsigned int>& contextWords, vector<vector<float> >& wordVectors){
+RowVectorXf grad_word(unsigned int word, vector<unsigned int>& contextWords, vector<RowVectorXf>& wordVectors){
 
-    vector<float> sumVec(wordVectors[0].size(), 0.0);
+    RowVectorXf sumVec(wordVectors[0].size());
+    sumVec.setZero(sumVec.size());
     for (int i=0; i<contextWords.size(); i++)
-        vec_plus_equal(sumVec, wordVectors[contextWords[i]]);
+        sumVec += wordVectors[contextWords[i]];
     
     return sumVec;
 }
