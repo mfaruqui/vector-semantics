@@ -12,6 +12,7 @@
 
 using namespace std;
 using namespace Eigen;
+
 typedef std::tr1::unordered_map<string, unsigned int> mapStrUint;
 typedef std::tr1::unordered_map<unsigned int, float> mapUintFloat;
 typedef std::tr1::unordered_map<unsigned int, unsigned int> mapUintUint;

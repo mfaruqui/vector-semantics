@@ -9,13 +9,6 @@
 #include <Eigen/Core>
 #include "utils.h"
 
-using namespace std;
-using namespace Eigen;
-
-typedef std::tr1::unordered_map<string, unsigned int> mapStrUint;
-typedef std::tr1::unordered_map<unsigned int, float> mapUintFloat;
-typedef std::tr1::unordered_map<unsigned int, unsigned int> mapUintUint;
-
 float logistic(float val){
     
     if (val > 20) return 1;
@@ -25,8 +18,6 @@ float logistic(float val){
 
 float score_word_pair(RowVectorXf& wordVector, RowVectorXf& contextWordVector, float contextWordBias){
     
-    //float innerProduct = inner_product(wordVector.begin(), wordVector.end(), contextWordVector.begin(), 0.0);
-    //return  innerProduct + contextWordBias;
     return wordVector.dot(contextWordVector) + contextWordBias;
 }
 

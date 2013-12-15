@@ -8,13 +8,7 @@
 #include <map>
 #include <cmath>
 #include <Eigen/Core>
-
-using namespace std;
-using namespace Eigen;
-
-typedef std::tr1::unordered_map<string, unsigned int> mapStrUint;
-typedef std::tr1::unordered_map<string, string> mapStrStr;
-typedef std::tr1::unordered_map<unsigned int, float> mapUintFloat;
+#include "utils.h"
 
 float EPSILON = 0.00000000000000000001;
 

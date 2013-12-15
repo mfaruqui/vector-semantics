@@ -7,9 +7,6 @@
 #include "utils.h"
 #include "ivlbl.h"
 
-using namespace std;
-using namespace Eigen;
-
 vector<unsigned int> words_in_window(vector<unsigned int>& words, unsigned int wordIndex, unsigned int windowSize);
 
 void add_grad_to_words_adagrad(vector<unsigned int>& contextWords, float rate, RowVectorXf& updateVec, 
