@@ -8,17 +8,23 @@
 #include <map>
 #include <cmath>
 #include <Eigen/Core>
-#include "utils.h"
+
+using namespace std;
+using namespace Eigen;
+
+typedef std::tr1::unordered_map<string, unsigned int> mapStrUint;
+typedef std::tr1::unordered_map<unsigned int, float> mapUintFloat;
+typedef std::tr1::unordered_map<string, string> mapStrStr;
 
 float EPSILON = 0.00000000000000000001;
 
-void lower_string(string& word){
+void lower_string(string& word ){
     
     transform(word.begin(), word.end(), word.begin(), ::tolower);
     return;
 }
 
-string normalize_word(string& word){
+string normalize_word(string& word) {
     
     if (std::string::npos != word.find_first_of("0123456789"))
         return "---num---";
@@ -54,7 +60,7 @@ vector<string> split_line(string& line, char delim) {
     return words;
 }
 
-pair<mapStrUint, mapStrStr> get_vocab(char* filename){
+pair<mapStrUint, mapStrStr> get_vocab(char* filename) {
     
     string line, normWord;
     vector<string> words;
@@ -86,7 +92,7 @@ It is not deleting stuff, dont know why !
 while printing its still there ! x-(
 http://stackoverflow.com/questions/17036428/c-map-element-doesnt-get-erased-if-i-refer-to-it
 */
-void filter_vocab(mapStrUint& vocab, const int freqCutoff){
+void filter_vocab(mapStrUint& vocab, const int freqCutoff) {
     
     for (mapStrUint::iterator it = vocab.begin(); it != vocab.end();)
         if (it->second < freqCutoff)
@@ -97,7 +103,7 @@ void filter_vocab(mapStrUint& vocab, const int freqCutoff){
     return;
 }
 
-mapStrUint reindex_vocab(mapStrUint& vocab){
+mapStrUint reindex_vocab(mapStrUint& vocab) {
     
     unsigned int index = 0;
     mapStrUint indexedVocab;
@@ -107,7 +113,7 @@ mapStrUint reindex_vocab(mapStrUint& vocab){
     return indexedVocab;
 }
 
-mapUintFloat get_unigram_dist(mapStrUint& vocab, mapStrUint& indexedVocab){
+mapUintFloat get_unigram_dist(mapStrUint& vocab, mapStrUint& indexedVocab) {
 
     float sumFreq = 0;
     mapUintFloat unigramDist;
@@ -122,7 +128,7 @@ mapUintFloat get_unigram_dist(mapStrUint& vocab, mapStrUint& indexedVocab){
 
 }
 
-void print_map(mapStrUint& vocab){
+void print_map(mapStrUint& vocab) {
     
     for (mapStrUint::iterator it = vocab.begin(); it != vocab.end(); ++it)
         cout << it->first << " " << it->second << "\n";
@@ -130,7 +136,7 @@ void print_map(mapStrUint& vocab){
     return;
 }
 
-void print_map(mapUintFloat& vocab){
+void print_map(mapUintFloat& vocab) {
     
     for (mapUintFloat::iterator it = vocab.begin(); it != vocab.end(); ++it) 
         cout << it->first << " " << it->second << "\n";
@@ -138,7 +144,7 @@ void print_map(mapUintFloat& vocab){
     return;
 }
 
-void print_map(mapStrStr& vocab){
+void print_map(mapStrStr& vocab) {
     
     for (mapStrStr::iterator it = vocab.begin(); it != vocab.end(); ++it) 
         cout << it->first << " " << it->second << "\n";
@@ -146,7 +152,7 @@ void print_map(mapStrStr& vocab){
     return;
 }
 
-vector<RowVectorXf> epsilon_vector(unsigned int row, unsigned int col){
+vector<RowVectorXf> epsilon_vector(unsigned int row, unsigned int col) {
 
     vector<RowVectorXf> epsilonVec;
     RowVectorXf vec(col);
@@ -158,7 +164,7 @@ vector<RowVectorXf> epsilon_vector(unsigned int row, unsigned int col){
     return epsilonVec;
 }
 
-RowVectorXf epsilon_vector(unsigned int row){
+RowVectorXf epsilon_vector(unsigned int row) {
 
     RowVectorXf nonZeroVec(row);
     nonZeroVec.setOnes(row);
@@ -166,7 +172,7 @@ RowVectorXf epsilon_vector(unsigned int row){
     return nonZeroVec;
 }
 
-RowVectorXf random_vector(const unsigned int length){
+RowVectorXf random_vector(const unsigned int length) {
 
     RowVectorXf randVec(length);
     for (int i=0; i<randVec.size(); i++)
@@ -176,7 +182,7 @@ RowVectorXf random_vector(const unsigned int length){
     return randVec;
 }
 
-vector<RowVectorXf> random_vector(unsigned int row, unsigned int col){
+vector<RowVectorXf> random_vector(unsigned int row, unsigned int col) {
 
     vector<RowVectorXf> randVec;
     RowVectorXf vec(col);
@@ -190,12 +196,13 @@ vector<RowVectorXf> random_vector(unsigned int row, unsigned int col){
     return randVec;
 }
 
-void print_vectors(char* fileName, vector<RowVectorXf>& wordVectors, mapStrUint& indexedVocab){
+void print_vectors(char* fileName, vector<RowVectorXf>& wordVectors, 
+                   mapStrUint& indexedVocab) {
 
     ofstream outFile(fileName);
     for (mapStrUint::iterator it=indexedVocab.begin(); it!= indexedVocab.end(); it++){
-        // This check is wrong but I have to put, coz of the elements not getting deleted :(
-        // By this we will bem issing the word at index 0.
+        /* This check is wrong but I have to put, coz of the elements not getting deleted :(
+         By this we will bem issing the word at index 0. */
         if (it->second != 0){
             outFile << it->first << " ";
             for (int i=0; i != wordVectors[it->second].size(); i++)

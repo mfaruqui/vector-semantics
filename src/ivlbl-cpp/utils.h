@@ -33,6 +33,7 @@ vector<RowVectorXf> random_vector(unsigned int row, unsigned int col);
 vector<RowVectorXf> epsilon_vector(unsigned int row, unsigned int col);
 RowVectorXf epsilon_vector(unsigned int row);
 
-void print_vectors(char* fileName, vector<RowVectorXf>& wordVectors, mapStrUint& indexedVocab);
+void print_vectors(char* fileName, vector<RowVectorXf>& wordVectors, 
+                   mapStrUint& indexedVocab);
 
 #endif
