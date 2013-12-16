@@ -16,7 +16,7 @@ float logistic(float val) {
     else return 1/(1+exp(-1*val));
 }
 
-float score_word_in_context(unsigned int word, vector<unsigned int>& contextWords,
+float score_word_in_context(int word, vector<int>& contextWords,
                             RowVectorXf& wordBiases, vector<RowVectorXf>& wordVectors) {
     
     float sumScore = 0;
@@ -26,26 +26,26 @@ float score_word_in_context(unsigned int word, vector<unsigned int>& contextWord
     return sumScore;
 }
 
-float diff_score_word_and_noise(unsigned int word, vector<unsigned int>& contextWords,
-                                int numNoiseWords, mapUintFloat& noiseDist, 
+float diff_score_word_and_noise(int word, vector<int>& contextWords,
+                                int numNoiseWords, mapIntFloat& noiseDist, 
                                 RowVectorXf& wordBiases, vector<RowVectorXf >& wordVectors) {
     
     return score_word_in_context(word, contextWords, wordBiases, wordVectors) - log(numNoiseWords*noiseDist[word]);
 }
 
-float grad_bias(unsigned int word, vector<unsigned int>& contextWords, 
+float grad_bias(int word, vector<int>& contextWords, 
                 vector<RowVectorXf >& wordVectors) {
     
     return 1;
 }
 
-RowVectorXf grad_context_word(unsigned int word, vector<unsigned int>& contextWords, 
+RowVectorXf grad_context_word(int word, vector<int>& contextWords, 
                               vector<RowVectorXf >& wordVectors) {
     
     return wordVectors[word];
 }
 
-RowVectorXf grad_word(unsigned int word, vector<unsigned int>& contextWords, 
+RowVectorXf grad_word(int word, vector<int>& contextWords, 
                       vector<RowVectorXf>& wordVectors) {
 
     RowVectorXf sumVec(wordVectors[0].size());
@@ -57,11 +57,11 @@ RowVectorXf grad_word(unsigned int word, vector<unsigned int>& contextWords,
 }
 
 // Can be made better by using a map
-vector<unsigned int> get_noise_words(vector<unsigned int>& contextWords, 
-                                     int numNoiseWords, unsigned int vocabSize) {
+vector<int> get_noise_words(vector<int>& contextWords, 
+                                     int numNoiseWords, int vocabSize) {
 
-    vector<unsigned int> noiseWords(numNoiseWords, -1);
-    unsigned int selectedWords = 0, randIndex;
+    vector<int> noiseWords(numNoiseWords, -1);
+    int selectedWords = 0, randIndex;
     while (selectedWords != numNoiseWords){
         randIndex = rand() % vocabSize;
         //if (contextWords.find(randIndex) == contextWords.end())

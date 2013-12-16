@@ -12,8 +12,8 @@
 using namespace std;
 using namespace Eigen;
 
-typedef std::tr1::unordered_map<string, unsigned int> mapStrUint;
-typedef std::tr1::unordered_map<unsigned int, float> mapUintFloat;
+typedef std::tr1::unordered_map<string, int> mapStrInt;
+typedef std::tr1::unordered_map<int, float> mapIntFloat;
 typedef std::tr1::unordered_map<string, string> mapStrStr;
 
 float EPSILON = 0.00000000000000000001;
@@ -60,14 +60,14 @@ vector<string> split_line(string& line, char delim) {
     return words;
 }
 
-pair<mapStrUint, mapStrStr> get_vocab(char* filename) {
+pair<mapStrInt, mapStrStr> get_vocab(string filename) {
     
     string line, normWord;
     vector<string> words;
-    mapStrUint vocab;
+    mapStrInt vocab;
     mapStrStr word2norm;
     
-    ifstream myfile(filename);
+    ifstream myfile(filename.c_str());
     
     if (myfile.is_open()) {
         while(getline(myfile, line)) {
@@ -92,9 +92,9 @@ It is not deleting stuff, dont know why !
 while printing its still there ! x-(
 http://stackoverflow.com/questions/17036428/c-map-element-doesnt-get-erased-if-i-refer-to-it
 */
-void filter_vocab(mapStrUint& vocab, const int freqCutoff) {
+void filter_vocab(mapStrInt& vocab, const int freqCutoff) {
     
-    for (mapStrUint::iterator it = vocab.begin(); it != vocab.end();)
+    for (mapStrInt::iterator it = vocab.begin(); it != vocab.end();)
         if (it->second < freqCutoff)
             vocab.erase(it++);
         else
@@ -103,42 +103,42 @@ void filter_vocab(mapStrUint& vocab, const int freqCutoff) {
     return;
 }
 
-mapStrUint reindex_vocab(mapStrUint& vocab) {
+mapStrInt reindex_vocab(mapStrInt& vocab) {
     
-    unsigned int index = 0;
-    mapStrUint indexedVocab;
-    for (mapStrUint::iterator it = vocab.begin(); it != vocab.end(); ++it)
+    int index = 0;
+    mapStrInt indexedVocab;
+    for (mapStrInt::iterator it = vocab.begin(); it != vocab.end(); ++it)
         indexedVocab[it->first] = index++;
     
     return indexedVocab;
 }
 
-mapUintFloat get_unigram_dist(mapStrUint& vocab, mapStrUint& indexedVocab) {
+mapIntFloat get_unigram_dist(mapStrInt& vocab, mapStrInt& indexedVocab) {
 
     float sumFreq = 0;
-    mapUintFloat unigramDist;
+    mapIntFloat unigramDist;
     
-    for (mapStrUint::iterator it = vocab.begin(); it != vocab.end(); ++it)
+    for (mapStrInt::iterator it = vocab.begin(); it != vocab.end(); ++it)
         sumFreq += it->second;
     
-    for (mapStrUint::iterator it = vocab.begin(); it != vocab.end(); ++it)
+    for (mapStrInt::iterator it = vocab.begin(); it != vocab.end(); ++it)
         unigramDist[indexedVocab[it->first]] = it->second/sumFreq;
     
     return unigramDist;
 
 }
 
-void print_map(mapStrUint& vocab) {
+void print_map(mapStrInt& vocab) {
     
-    for (mapStrUint::iterator it = vocab.begin(); it != vocab.end(); ++it)
+    for (mapStrInt::iterator it = vocab.begin(); it != vocab.end(); ++it)
         cout << it->first << " " << it->second << "\n";
     
     return;
 }
 
-void print_map(mapUintFloat& vocab) {
+void print_map(mapIntFloat& vocab) {
     
-    for (mapUintFloat::iterator it = vocab.begin(); it != vocab.end(); ++it) 
+    for (mapIntFloat::iterator it = vocab.begin(); it != vocab.end(); ++it) 
         cout << it->first << " " << it->second << "\n";
     
     return;
@@ -152,7 +152,7 @@ void print_map(mapStrStr& vocab) {
     return;
 }
 
-vector<RowVectorXf> epsilon_vector(unsigned int row, unsigned int col) {
+vector<RowVectorXf> epsilon_vector(int row, int col) {
 
     vector<RowVectorXf> epsilonVec;
     RowVectorXf vec(col);
@@ -164,7 +164,7 @@ vector<RowVectorXf> epsilon_vector(unsigned int row, unsigned int col) {
     return epsilonVec;
 }
 
-RowVectorXf epsilon_vector(unsigned int row) {
+RowVectorXf epsilon_vector(int row) {
 
     RowVectorXf nonZeroVec(row);
     nonZeroVec.setOnes(row);
@@ -172,7 +172,7 @@ RowVectorXf epsilon_vector(unsigned int row) {
     return nonZeroVec;
 }
 
-RowVectorXf random_vector(const unsigned int length) {
+RowVectorXf random_vector(const int length) {
 
     RowVectorXf randVec(length);
     for (int i=0; i<randVec.size(); i++)
@@ -182,7 +182,7 @@ RowVectorXf random_vector(const unsigned int length) {
     return randVec;
 }
 
-vector<RowVectorXf> random_vector(unsigned int row, unsigned int col) {
+vector<RowVectorXf> random_vector(int row, int col) {
 
     vector<RowVectorXf> randVec;
     RowVectorXf vec(col);
@@ -197,10 +197,10 @@ vector<RowVectorXf> random_vector(unsigned int row, unsigned int col) {
 }
 
 void print_vectors(char* fileName, vector<RowVectorXf>& wordVectors, 
-                   mapStrUint& indexedVocab) {
+                   mapStrInt& indexedVocab) {
 
     ofstream outFile(fileName);
-    for (mapStrUint::iterator it=indexedVocab.begin(); it!= indexedVocab.end(); it++){
+    for (mapStrInt::iterator it=indexedVocab.begin(); it!= indexedVocab.end(); it++){
         /* This check is wrong but I have to put, coz of the elements not getting deleted :(
          By this we will bem issing the word at index 0. */
         if (it->second != 0){
@@ -212,4 +212,38 @@ void print_vectors(char* fileName, vector<RowVectorXf>& wordVectors,
     }
     
     return;
+}
+
+vector<int> words_in_window(vector<int>& words, int wordIndex, 
+                            int windowSize) {
+    
+    vector<int> wordsInWindow;
+    int sentLen = words.size();
+    
+    if (wordIndex < windowSize) {
+        if (wordIndex + windowSize + 1 < sentLen)
+            wordsInWindow.insert(wordsInWindow.begin(), 
+                                 words.begin()+wordIndex+1, 
+                                 words.begin()+wordIndex+1+windowSize);
+        else
+            wordsInWindow.insert(wordsInWindow.begin(), 
+                                 words.begin()+wordIndex+1, words.end());
+                                 
+        wordsInWindow.insert(wordsInWindow.begin(), words.begin(), 
+                             words.begin()+wordIndex);
+    } else {
+        if (wordIndex + windowSize + 1 < sentLen)
+            wordsInWindow.insert(wordsInWindow.begin(), 
+                                 words.begin()+wordIndex+1, 
+                                 words.begin()+wordIndex+1+windowSize);
+        else
+            wordsInWindow.insert(wordsInWindow.begin(), 
+                                 words.begin()+wordIndex+1, words.end());
+                                 
+        wordsInWindow.insert(wordsInWindow.begin(), 
+                             words.begin()+wordIndex-windowSize, 
+                             words.begin()+wordIndex);
+    }
+    
+    return wordsInWindow;
 }
