@@ -1,3 +1,16 @@
+/*  Copyright 2013 Manaal Faruqui. All Rights Reserved.
+    
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+            
+                  http://www.apache.org/licenses/LICENSE-2.0
+  
+  Code to compute word vector representations using the 
+  Inverse Log bilinear Model presented in (Mnih and Kavukcuoglu, 2013)
+  and trained using Noise Contrastive Estimation (Gutmann and Hyvarinen 2010).
+*/
+
 #include <iostream>
 #include <vector>
 #include <fstream>
