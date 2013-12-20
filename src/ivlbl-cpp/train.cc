@@ -86,12 +86,12 @@ It is not deleting stuff, dont know why !
 while printing its still there ! x-(
 http://stackoverflow.com/questions/17036428/c-map-element-doesnt-get-erased-if-i-refer-to-it
 */
-void filter_vocab(mapStrInt& vocab, const int freqCutoff) {
-    for (mapStrInt::iterator it = vocab.begin(); it != vocab.end();)
-        if (it->second < freqCutoff)
-            vocab.erase(it++);
-        else
-            it++;
+mapStrInt filter_vocab(mapStrInt& vocab, const int freqCutoff) {
+    mapStrInt filtVocab;
+    for (mapStrInt::iterator it = vocab.begin(); it != vocab.end(); ++it)
+        if (! (it->second < freqCutoff) )
+            filtVocab[it->first] = it->second;
+    return filtVocab;
 }
 
 mapStrInt reindex_vocab(mapStrInt& vocab) {
@@ -164,7 +164,7 @@ void print_vectors(char* fileName, vector<RowVectorXf>& wordVectors,
     for (mapStrInt::iterator it=indexedVocab.begin(); it!= indexedVocab.end(); it++){
         /* This check is wrong but I have to put it, coz of the elements not getting deleted :(
          By this we will bem issing the word at index 0. */
-        if (it->second != 0){
+         if (it->second != 0){
             outFile << it->first << " ";
             for (int i=0; i != wordVectors[it->second].size(); ++i)
                 outFile << wordVectors[it->second][i] << " ";
@@ -246,7 +246,7 @@ class WordVectorLearner {
         vocab = vocabPair.first;
         word2norm = vocabPair.second;
         cerr << "Orig vocab " << vocab.size() << "\n";
-        filter_vocab(vocab, freqCutoff);
+        vocab = filter_vocab(vocab, freqCutoff);
         cerr << "Filtered vocab " << vocab.size() << "\n";
         indexedVocab = reindex_vocab(vocab);
         vocabSize = indexedVocab.size();
@@ -265,7 +265,7 @@ class WordVectorLearner {
     
     void train_word_vectors(vector<int>& words, float rate) {
         /* The noise words remain the same per sentence as of now */
-        vector<int> noiseWords = get_noise_words(words, numNoiseWords, vocabSize);
+        vector<int> noiseWords;
         vector<int> contextWords;
         int contextWord, start, end, sentLen=words.size();
         float wordContextScore, updateInBias, updateBiasSquare, noiseScore, noiseScoreSum;
@@ -275,6 +275,7 @@ class WordVectorLearner {
             noiseScoreGradProd.setZero(noiseScoreGradProd.size());
             /* Get the words in the window context of the target word */
             contextWords = words_in_window(words, i, windowSize);
+            noiseWords = get_noise_words(contextWords, numNoiseWords, vocabSize);
             /* Get the diff of score of the word in context and the noise dist */
             wordContextScore = logistic(diff_score_word_and_noise(words[i], contextWords, numNoiseWords,
                                                                   noiseDist, wordBiases, wordVectors, logNumNoiseWords));
@@ -343,7 +344,7 @@ class WordVectorLearner {
 
 int main(){
     string corpus = "../10k";
-    int window = 5, freqCutoff = 1, noiseWords = 10, vectorLen = 80, numIter = 1;
+    int window = 5, freqCutoff = 2, noiseWords = 10, vectorLen = 80, numIter = 2;
     float rate = 0.05;
     
     WordVectorLearner obj (window, freqCutoff, noiseWords, vectorLen);
