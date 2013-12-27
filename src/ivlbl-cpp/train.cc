@@ -28,13 +28,17 @@
 using namespace std;
 using namespace Eigen;
 
+#define EPSILON 0.00000000000000000001;
+#define MAX_EXP 10
+
 typedef std::tr1::unordered_map<string, unsigned> mapStrUnsigned;
 typedef std::tr1::unordered_map<string, string> mapStrStr;
 typedef std::tr1::unordered_map<unsigned, double> mapUnsignedDouble;
+typedef std::tr1::unordered_map<int, double> mapIntDouble;
+
+mapIntDouble LOGISTIC;
 
 /* =================== Utility functions begin =================== */
-
-double EPSILON = 0.00000000000000000001;
 
 string normalize_word(string& word) {
   if (std::string::npos != word.find_first_of("0123456789"))
@@ -98,8 +102,10 @@ mapStrUnsigned filter_vocab(mapStrUnsigned& vocab, const unsigned freqCutoff) {
 mapStrUnsigned reindex_vocab(mapStrUnsigned& vocab) {
   unsigned index = 0;
   mapStrUnsigned indexedVocab;
-  for (mapStrUnsigned::iterator it = vocab.begin(); it != vocab.end(); ++it)
-    indexedVocab[it->first] = index++;
+  for (mapStrUnsigned::iterator it = vocab.begin(); it != vocab.end(); ++it){
+    string word = it->first;
+    indexedVocab[word] = index++;
+  }
   return indexedVocab;
 }
 
@@ -156,12 +162,6 @@ void print_vectors(char* fileName, vector<RowVectorXf>& wordVectors,
       outFile << "\n";
     }
   }
-}
-
-double logistic(double val) {
-  if (val > 20) return 1;
-  else if (val < -20) return 0.;
-  else return 1/(1+exp(-1*val));
 }
 
 /* =================== Utility functions end =================== */
@@ -241,8 +241,9 @@ public:
         if (i != tgtWrdIx)
           contextWords.push_back(words[i]);
       /* Get the diff of score of the word in context and the noise dist */
-      double wordContextScore = logistic(diff_score_word_and_noise(words[tgtWrdIx], contextWords, numNoiseWords,
-                                                            noiseDist, wordBiases, wordVectors, logNumNoiseWords));
+      double x = diff_score_word_and_noise(words[tgtWrdIx], contextWords, numNoiseWords,
+                                          noiseDist, wordBiases, wordVectors, logNumNoiseWords);
+      double wordContextScore = (x>MAX_EXP)? 1: (x<MAX_EXP? 0: 1/(1+exp(-x)));
       /* Select noise words for this target word */
       unsigned noiseWords[numNoiseWords];
       for (unsigned selWrds=0; selWrds<numNoiseWords; ++selWrds)
@@ -252,8 +253,9 @@ public:
       noiseScoreGradProd.setZero(noiseScoreGradProd.size());
       double noiseScoreSum=0;
       for (unsigned j=0; j<numNoiseWords; ++j) {
-        double noiseScore = logistic(diff_score_word_and_noise(noiseWords[j], contextWords, numNoiseWords,
-                                                        noiseDist, wordBiases, wordVectors, logNumNoiseWords));
+        double y = diff_score_word_and_noise(noiseWords[j], contextWords, numNoiseWords,
+                                            noiseDist, wordBiases, wordVectors, logNumNoiseWords);
+        double noiseScore = (y>MAX_EXP) ? 1 : (y<MAX_EXP ? 0 : 1/(1+exp(-y)));
         noiseScoreSum += noiseScore;
         noiseScoreGradProd += noiseScore * wordVectors[noiseWords[j]];
       }
@@ -293,8 +295,8 @@ public:
         while (getline(inputFile, line)) {
           /* Extract normalized words from sentences */
           tokens = split_line(line, ' ');
-          for (unsigned i=0; i<tokens.size(); ++i){
-            token = tokens[i];
+          for (unsigned j=0; j<tokens.size(); ++j){
+            token = tokens[j];
             if (word2norm.find(token) != word2norm.end())
               words.push_back(indexedVocab[word2norm[token]]);
             }
@@ -316,7 +318,7 @@ public:
 };
 
 int main(int argc, char **argv){
-  
+  //pre_compute_logistic();
   string corpus = "../10k";
   unsigned window = 5, freqCutoff = 1, noiseWords = 10, vectorLen = 80, numIter = 5;
   double rate = 0.05;
