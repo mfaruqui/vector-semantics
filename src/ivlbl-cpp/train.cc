@@ -165,20 +165,6 @@ double logistic(double val) {
 }
 
 /* =================== Utility functions end =================== */
-
-vector<unsigned> words_in_window(vector<unsigned>& words, unsigned wordIndex, 
-                            unsigned windowSize) {
-  vector<unsigned> wordsInWindow;
-  unsigned start, end, sentLen = words.size();
-  start = (wordIndex <= windowSize) ? 0 : wordIndex-windowSize;
-  end = (sentLen - wordIndex <= windowSize) ? sentLen-1 : wordIndex + windowSize;
-  for (unsigned i=start; i<wordIndex; ++i)
-    wordsInWindow.push_back(words[i]);
-  for (unsigned i=wordIndex+1; i<=end; ++i)
-    wordsInWindow.push_back(words[i]);
-  return wordsInWindow;
-}
-
 double diff_score_word_and_noise(unsigned word, vector<unsigned>& contextWords,
                                 unsigned numNoiseWords, mapUnsignedDouble& noiseDist,
                                 RowVectorXf& wordBiases,
@@ -204,7 +190,6 @@ class WordVectorLearner {
   RowVectorXf wordBiases, adagradBiasMem;
   /* For sampling noise words */
   AliasSampler sampler;
-  unsigned noiseSelecMode=1;
     
 public:
       
@@ -244,37 +229,29 @@ public:
       multinomial[it->first] = exp(it->second);
     sampler.initialise(multinomial);
   }
-  
-  /* Selects noise words according to specified distribution */
-  vector<unsigned> get_noise_words() {
-    vector<unsigned> noiseWords;
-    unsigned selectedWords = 0;
-    if (noiseSelecMode == 0)
-      while (selectedWords != numNoiseWords) {
-          noiseWords.push_back(rand() % vocabSize);
-          ++selectedWords;
-      }
-    else
-      while (selectedWords != numNoiseWords) {
-        noiseWords.push_back(sampler.Draw());
-        ++selectedWords;
-      }
-    return noiseWords;
-  }
     
   void train_word_vectors(vector<unsigned>& words, double rate) {
-    for (unsigned i=0; i<words.size(); ++i) {
-      vector<unsigned> noiseWords = get_noise_words();
+    for (unsigned tgtWrdIx=0; tgtWrdIx<words.size(); ++tgtWrdIx) {
       /* Get the words in the window context of the target word */
-      vector<unsigned> contextWords = words_in_window(words, i, windowSize);
+      vector<unsigned> contextWords;
+      unsigned start, end, sentLen = words.size();
+      start = (tgtWrdIx <= windowSize) ? 0 : tgtWrdIx-windowSize;
+      end = (sentLen-tgtWrdIx <= windowSize) ? sentLen-1 : tgtWrdIx+windowSize;
+      for (unsigned i=start; i<=end; ++i)
+        if (i != tgtWrdIx)
+          contextWords.push_back(words[i]);
       /* Get the diff of score of the word in context and the noise dist */
-      double wordContextScore = logistic(diff_score_word_and_noise(words[i], contextWords, numNoiseWords,
+      double wordContextScore = logistic(diff_score_word_and_noise(words[tgtWrdIx], contextWords, numNoiseWords,
                                                             noiseDist, wordBiases, wordVectors, logNumNoiseWords));
-      /* Get the diff of score of the noise words in context and the noise dist */     
+      /* Select noise words for this target word */
+      unsigned noiseWords[numNoiseWords];
+      for (unsigned selWrds=0; selWrds<numNoiseWords; ++selWrds)
+        noiseWords[selWrds] = sampler.Draw();
+      /* Get the diff of score of noise words in context and the noise dist */
       RowVectorXf noiseScoreGradProd(wordVectors[0].size());
       noiseScoreGradProd.setZero(noiseScoreGradProd.size());
-      double noiseScoreSum = 0;
-      for (unsigned j=0; j<noiseWords.size(); ++j) {
+      double noiseScoreSum=0;
+      for (unsigned j=0; j<numNoiseWords; ++j) {
         double noiseScore = logistic(diff_score_word_and_noise(noiseWords[j], contextWords, numNoiseWords,
                                                         noiseDist, wordBiases, wordVectors, logNumNoiseWords));
         noiseScoreSum += noiseScore;
@@ -282,7 +259,7 @@ public:
       }
       /* Grad wrt bias is one, grad wrt contextWord is the target word */
       double updateInBias = 1 - wordContextScore - noiseScoreSum;
-      RowVectorXf updateInVec = (1 - wordContextScore) * wordVectors[words[i]] - noiseScoreGradProd;
+      RowVectorXf updateInVec = (1 - wordContextScore) * wordVectors[words[tgtWrdIx]] - noiseScoreGradProd;
       /* Update adagrad params and add the updates to the context words now */
       RowVectorXf updateVecSquare = updateInVec.array().square();
       double updateBiasSquare = updateInBias*updateInBias;
@@ -341,11 +318,11 @@ public:
 int main(int argc, char **argv){
   
   string corpus = "../10k";
-  unsigned window = 5, freqCutoff = 2, noiseWords = 10, vectorLen = 80, numIter = 1;
+  unsigned window = 5, freqCutoff = 1, noiseWords = 10, vectorLen = 80, numIter = 5;
   double rate = 0.05;
   
   WordVectorLearner obj (window, freqCutoff, noiseWords, vectorLen);
   obj.train_on_corpus(corpus, numIter, rate);
-  print_vectors("x.txt", obj.wordVectors, obj.indexedVocab);
+  print_vectors("y.txt", obj.wordVectors, obj.indexedVocab);
   return 1;
 }
