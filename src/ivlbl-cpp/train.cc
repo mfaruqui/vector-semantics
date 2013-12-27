@@ -243,7 +243,7 @@ public:
       /* Get the diff of score of the word in context and the noise dist */
       double x = diff_score_word_and_noise(words[tgtWrdIx], contextWords, numNoiseWords,
                                           noiseDist, wordBiases, wordVectors, logNumNoiseWords);
-      double wordContextScore = (x>MAX_EXP)? 1: (x<MAX_EXP? 0: 1/(1+exp(-x)));
+      double wordContextScore = (x>MAX_EXP)? 1: (x<-MAX_EXP? 0: 1/(1+exp(-x)));
       /* Select noise words for this target word */
       unsigned noiseWords[numNoiseWords];
       for (unsigned selWrds=0; selWrds<numNoiseWords; ++selWrds)
@@ -255,7 +255,7 @@ public:
       for (unsigned j=0; j<numNoiseWords; ++j) {
         double y = diff_score_word_and_noise(noiseWords[j], contextWords, numNoiseWords,
                                             noiseDist, wordBiases, wordVectors, logNumNoiseWords);
-        double noiseScore = (y>MAX_EXP) ? 1 : (y<MAX_EXP ? 0 : 1/(1+exp(-y)));
+        double noiseScore = (y>MAX_EXP)? 1: (y<-MAX_EXP? 0: 1/(1+exp(-y)));
         noiseScoreSum += noiseScore;
         noiseScoreGradProd += noiseScore * wordVectors[noiseWords[j]];
       }
@@ -319,12 +319,12 @@ public:
 
 int main(int argc, char **argv){
   //pre_compute_logistic();
-  string corpus = "../10k";
-  unsigned window = 5, freqCutoff = 1, noiseWords = 10, vectorLen = 80, numIter = 5;
+  string corpus = "../news.2011.en.norm";
+  unsigned window = 5, freqCutoff = 10, noiseWords = 10, vectorLen = 80, numIter = 1;
   double rate = 0.05;
   
   WordVectorLearner obj (window, freqCutoff, noiseWords, vectorLen);
   obj.train_on_corpus(corpus, numIter, rate);
-  print_vectors("y.txt", obj.wordVectors, obj.indexedVocab);
+  print_vectors("news-n3-fast.txt", obj.wordVectors, obj.indexedVocab);
   return 1;
 }
