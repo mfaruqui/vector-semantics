@@ -165,8 +165,8 @@ void print_vectors(char* fileName, vector<RowVectorXf>& wordVectors,
 }
 
 /* =================== Utility functions end =================== */
-double diff_score_word_and_noise(unsigned word, vector<unsigned>& contextWords,
-                                unsigned numNoiseWords, mapUnsignedDouble& noiseDist,
+double diff_score_word_noise(unsigned word, vector<unsigned>& contextWords,
+                                mapUnsignedDouble& noiseDist,
                                 RowVectorXf& wordBiases,
                                 vector<RowVectorXf >& wordVectors,
                                 double logNumNoiseWords) {                     
@@ -234,15 +234,16 @@ public:
     for (unsigned tgtWrdIx=0; tgtWrdIx<words.size(); ++tgtWrdIx) {
       /* Get the words in the window context of the target word */
       vector<unsigned> contextWords;
-      unsigned start, end, sentLen = words.size();
-      start = (tgtWrdIx <= windowSize) ? 0 : tgtWrdIx-windowSize;
-      end = (sentLen-tgtWrdIx <= windowSize) ? sentLen-1 : tgtWrdIx+windowSize;
+      unsigned start, end, sentLen = words.size(), tgtWord=words[tgtWrdIx];
+      start = (tgtWrdIx <= windowSize)? 0: tgtWrdIx-windowSize;
+      end = (sentLen-tgtWrdIx <= windowSize)? sentLen-1: tgtWrdIx+windowSize;
       for (unsigned i=start; i<=end; ++i)
         if (i != tgtWrdIx)
           contextWords.push_back(words[i]);
       /* Get the diff of score of the word in context and the noise dist */
-      double x = diff_score_word_and_noise(words[tgtWrdIx], contextWords, numNoiseWords,
-                                          noiseDist, wordBiases, wordVectors, logNumNoiseWords);
+      double x = diff_score_word_noise(tgtWord, contextWords,
+                                       noiseDist, wordBiases, wordVectors,
+                                       logNumNoiseWords);
       double wordContextScore = (x>MAX_EXP)? 1: (x<-MAX_EXP? 0: 1/(1+exp(-x)));
       /* Select noise words for this target word */
       unsigned noiseWords[numNoiseWords];
@@ -253,15 +254,16 @@ public:
       noiseScoreGradProd.setZero(noiseScoreGradProd.size());
       double noiseScoreSum=0;
       for (unsigned j=0; j<numNoiseWords; ++j) {
-        double y = diff_score_word_and_noise(noiseWords[j], contextWords, numNoiseWords,
-                                            noiseDist, wordBiases, wordVectors, logNumNoiseWords);
+        double y = diff_score_word_noise(noiseWords[j], contextWords,
+                                         noiseDist, wordBiases, wordVectors,
+                                         logNumNoiseWords);
         double noiseScore = (y>MAX_EXP)? 1: (y<-MAX_EXP? 0: 1/(1+exp(-y)));
         noiseScoreSum += noiseScore;
         noiseScoreGradProd += noiseScore * wordVectors[noiseWords[j]];
       }
       /* Grad wrt bias is one, grad wrt contextWord is the target word */
       double updateInBias = 1 - wordContextScore - noiseScoreSum;
-      RowVectorXf updateInVec = (1 - wordContextScore) * wordVectors[words[tgtWrdIx]] - noiseScoreGradProd;
+      RowVectorXf updateInVec = (1-wordContextScore) * wordVectors[tgtWord] - noiseScoreGradProd;
       /* Update adagrad params and add the updates to the context words now */
       RowVectorXf updateVecSquare = updateInVec.array().square();
       double updateBiasSquare = updateInBias*updateInBias;
