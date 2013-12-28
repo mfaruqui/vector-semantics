@@ -29,14 +29,15 @@ using namespace std;
 using namespace Eigen;
 
 #define EPSILON 0.00000000000000000001;
-#define MAX_EXP 10
+#define EXP_TABLE_SIZE 1000
+#define MAX_EXP 6
 
 typedef std::tr1::unordered_map<string, unsigned> mapStrUnsigned;
 typedef std::tr1::unordered_map<string, string> mapStrStr;
 typedef std::tr1::unordered_map<unsigned, double> mapUnsignedDouble;
 typedef std::tr1::unordered_map<int, double> mapIntDouble;
 
-mapIntDouble LOGISTIC;
+mapIntDouble SIGMOID;
 
 /* =================== Utility functions begin =================== */
 
@@ -171,7 +172,6 @@ double diff_score_word_noise(unsigned word, vector<unsigned>& contextWords,
                              vector<RowVectorXf>& wordVectors,
                              double logNumNoiseWords) {                     
   double sumScore = 0;
-  #pragma omp parallel for reduction(+:sumScore) num_threads(3)
   for (unsigned i=0; i<contextWords.size(); ++i)
     sumScore += wordVectors[word].dot(wordVectors[contextWords[i]]) + wordBiases[contextWords[i]];
   return sumScore - logNumNoiseWords - noiseDist[word];
@@ -231,7 +231,9 @@ public:
   }
     
   void train_word_vectors(vector<unsigned>& words, double rate) {
-    for (unsigned tgtWrdIx=0; tgtWrdIx<words.size(); ++tgtWrdIx) {
+    unsigned tgtWrdIx;
+    #pragma omp parallel for num_threads(6) private(tgtWrdIx)
+    for (tgtWrdIx=0; tgtWrdIx<words.size(); ++tgtWrdIx) {
       /* Get the words in the window context of the target word */
       vector<unsigned> contextWords;
       unsigned start, end, sentLen = words.size(), tgtWord=words[tgtWrdIx];
@@ -244,7 +246,7 @@ public:
       double x = diff_score_word_noise(tgtWord, contextWords,
                                        noiseDist, wordBiases, wordVectors,
                                        logNumNoiseWords);
-      double wordContextScore = (x>MAX_EXP)? 1: (x<-MAX_EXP? 0: 1/(1+exp(-x)));
+      double wordContextScore = (x>MAX_EXP)? 1: (x<-MAX_EXP? 0: SIGMOID[(int)((x+MAX_EXP)*(EXP_TABLE_SIZE/MAX_EXP/2))]);
       /* Select noise words for this target word */
       unsigned noiseWords[numNoiseWords];
       for (unsigned selWrds=0; selWrds<numNoiseWords; ++selWrds)
@@ -257,7 +259,7 @@ public:
         double y = diff_score_word_noise(noiseWords[j], contextWords,
                                          noiseDist, wordBiases, wordVectors,
                                          logNumNoiseWords);
-        double noiseScore = (y>MAX_EXP)? 1: (y<-MAX_EXP? 0: 1/(1+exp(-y)));
+        double noiseScore = (y>MAX_EXP)? 1: (y<-MAX_EXP? 0: SIGMOID[(int)((y+MAX_EXP)*(EXP_TABLE_SIZE/MAX_EXP/2))]);
         noiseScoreSum += noiseScore;
         noiseScoreGradProd += noiseScore * wordVectors[noiseWords[j]];
       }
@@ -321,12 +323,18 @@ public:
 
 int main(int argc, char **argv){
   
-  string corpus = "../news.2011.en.norm";
-  unsigned window = 5, freqCutoff = 10, noiseWords = 10, vectorLen = 80, numIter = 1;
+  /* pre-computing the logistic func values */
+  for (unsigned i = 0; i < EXP_TABLE_SIZE; i++) {
+    SIGMOID[i] = exp((i / (double)EXP_TABLE_SIZE * 2 - 1) * MAX_EXP);
+    SIGMOID[i] = SIGMOID[i] / (SIGMOID[i] + 1);
+  }
+      
+  string corpus = "../10k";
+  unsigned window = 5, freqCutoff = 2, noiseWords = 10, vectorLen = 80, numIter = 5;
   double rate = 0.05;
   
   WordVectorLearner obj (window, freqCutoff, noiseWords, vectorLen);
   obj.train_on_corpus(corpus, numIter, rate);
-  print_vectors("news-n3-fast.txt", obj.wordVectors, obj.indexedVocab);
+  print_vectors("y.txt", obj.wordVectors, obj.indexedVocab);
   return 1;
 }
