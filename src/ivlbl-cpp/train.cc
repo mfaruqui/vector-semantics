@@ -166,10 +166,10 @@ void print_vectors(char* fileName, vector<RowVectorXf>& wordVectors,
 
 /* =================== Utility functions end =================== */
 double diff_score_word_noise(unsigned word, vector<unsigned>& contextWords,
-                                mapUnsignedDouble& noiseDist,
-                                RowVectorXf& wordBiases,
-                                vector<RowVectorXf >& wordVectors,
-                                double logNumNoiseWords) {                     
+                             mapUnsignedDouble& noiseDist,
+                             RowVectorXf& wordBiases,
+                             vector<RowVectorXf>& wordVectors,
+                             double logNumNoiseWords) {                     
   double sumScore = 0;
   #pragma omp parallel for reduction(+:sumScore) num_threads(3)
   for (unsigned i=0; i<contextWords.size(); ++i)
@@ -320,7 +320,7 @@ public:
 };
 
 int main(int argc, char **argv){
-  //pre_compute_logistic();
+  
   string corpus = "../news.2011.en.norm";
   unsigned window = 5, freqCutoff = 10, noiseWords = 10, vectorLen = 80, numIter = 1;
   double rate = 0.05;
