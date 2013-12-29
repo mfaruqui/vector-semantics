@@ -16,15 +16,11 @@ using namespace std;
 using namespace Eigen;
 
 #define EPSILON 0.00000000000000000001;
-#define EXP_TABLE_SIZE 1000
-#define MAX_EXP 6
+#define MAX_EXP 10
 
 typedef std::tr1::unordered_map<string, unsigned> mapStrUnsigned;
 typedef std::tr1::unordered_map<string, string> mapStrStr;
 typedef std::tr1::unordered_map<unsigned, double> mapUnsignedDouble;
-typedef std::tr1::unordered_map<int, double> mapIntDouble;
-
-mapIntDouble SIGMOID;
 
 /* =================== Utility functions begin =================== */
 
@@ -90,7 +86,7 @@ mapStrUnsigned filter_vocab(mapStrUnsigned& vocab, const unsigned freqCutoff) {
 mapStrUnsigned reindex_vocab(mapStrUnsigned& vocab) {
   unsigned index = 0;
   mapStrUnsigned indexedVocab;
-  for (mapStrUnsigned::iterator it = vocab.begin(); it != vocab.end(); ++it){
+  for (mapStrUnsigned::iterator it = vocab.begin(); it != vocab.end(); ++it) {
     string word = it->first;
     indexedVocab[word] = index++;
   }
@@ -151,8 +147,8 @@ void print_vectors(char* fileName, vector<RowVectorXf>& wordVectors,
     }
   }
 }
-
 /* =================== Utility functions end =================== */
+
 double diff_score_word_noise(unsigned word, vector<unsigned>& contextWords,
                              mapUnsignedDouble& noiseDist,
                              RowVectorXf& wordBiases,
@@ -233,7 +229,7 @@ public:
       double x = diff_score_word_noise(tgtWord, contextWords,
                                        noiseDist, wordBiases, wordVectors,
                                        logNumNoiseWords);
-      double wordContextScore = (x>MAX_EXP)? 1: (x<-MAX_EXP? 0: SIGMOID[(int)((x+MAX_EXP)*(EXP_TABLE_SIZE/MAX_EXP/2))]);
+      double wordContextScore = (x>MAX_EXP)? 1: (x<-MAX_EXP? 0: 1/(1+exp(-x)));
       /* Select noise words for this target word */
       unsigned noiseWords[numNoiseWords];
       for (unsigned selWrds=0; selWrds<numNoiseWords; ++selWrds)
@@ -246,7 +242,7 @@ public:
         double y = diff_score_word_noise(noiseWords[j], contextWords,
                                          noiseDist, wordBiases, wordVectors,
                                          logNumNoiseWords);
-        double noiseScore = (y>MAX_EXP)? 1: (y<-MAX_EXP? 0: SIGMOID[(int)((y+MAX_EXP)*(EXP_TABLE_SIZE/MAX_EXP/2))]);
+        double noiseScore = (y>MAX_EXP)? 1: (y<-MAX_EXP? 0: 1/(1+exp(-y)));
         noiseScoreSum += noiseScore;
         noiseScoreGradProd += noiseScore * wordVectors[noiseWords[j]];
       }
@@ -309,12 +305,6 @@ public:
 };
 
 int main(int argc, char **argv){
-  /* pre-computing the logistic func values */
-  for (unsigned i = 0; i < EXP_TABLE_SIZE; i++) {
-    SIGMOID[i] = exp((i / (double)EXP_TABLE_SIZE * 2 - 1) * MAX_EXP);
-    SIGMOID[i] = SIGMOID[i] / (SIGMOID[i] + 1);
-  }
-      
   string corpus = "../10k";
   unsigned window = 5, freqCutoff = 2, noiseWords = 10, vectorLen = 80;
   unsigned numIter = 1, numCores = 6;
