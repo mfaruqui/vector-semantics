@@ -217,9 +217,9 @@ public:
     sampler.initialise(multinomial);
   }
     
-  void train_word_vectors(vector<unsigned>& words, double rate) {
+  void train_word_vectors(vector<unsigned>& words, unsigned nCores, double rate) {
     unsigned tgtWrdIx;
-    #pragma omp parallel for num_threads(6) private(tgtWrdIx)
+    #pragma omp parallel for num_threads(nCores) private(tgtWrdIx)
     for (tgtWrdIx=0; tgtWrdIx<words.size(); ++tgtWrdIx) {
       /* Get the words in the window context of the target word */
       vector<unsigned> contextWords;
@@ -269,15 +269,15 @@ public:
     }
   }
 
-  void train_on_corpus(string corpusName, unsigned iter, double learningRate) {
-    preprocess_vocab(corpusName);
+  void train_on_corpus(string corpus, unsigned iter, unsigned nCores, double lRate) {
+    preprocess_vocab(corpus);
     init_vectors(vocabSize, vecLen);
     set_noise_dist();
     for (unsigned i=0; i<iter; ++i) {
-      double rate = learningRate/(i+1);
+      double rate = lRate/(i+1);
       cerr << "Iteration: " << i+1 << "\n";
       cerr << "Learning rate: " << rate << "\n";
-      ifstream inputFile(corpusName.c_str());
+      ifstream inputFile(corpus.c_str());
       string line, normWord, token;
       vector<string> tokens;
       vector<unsigned> words;
@@ -292,7 +292,7 @@ public:
               words.push_back(indexedVocab[word2norm[token]]);
             }
             /* Train word vectors now */
-            train_word_vectors(words, rate);
+            train_word_vectors(words, nCores, rate);
             numWords += words.size();
             cerr << int(numWords/1000) << "K\r";
             words.clear();
@@ -309,7 +309,6 @@ public:
 };
 
 int main(int argc, char **argv){
-  
   /* pre-computing the logistic func values */
   for (unsigned i = 0; i < EXP_TABLE_SIZE; i++) {
     SIGMOID[i] = exp((i / (double)EXP_TABLE_SIZE * 2 - 1) * MAX_EXP);
@@ -317,11 +316,12 @@ int main(int argc, char **argv){
   }
       
   string corpus = "../10k";
-  unsigned window = 5, freqCutoff = 2, noiseWords = 10, vectorLen = 80, numIter = 5;
+  unsigned window = 5, freqCutoff = 2, noiseWords = 10, vectorLen = 80;
+  unsigned numIter = 1, numCores = 6;
   double rate = 0.05;
   
   WordVectorLearner obj (window, freqCutoff, noiseWords, vectorLen);
-  obj.train_on_corpus(corpus, numIter, rate);
+  obj.train_on_corpus(corpus, numIter, numCores, rate);
   print_vectors("y.txt", obj.wordVectors, obj.indexedVocab);
   return 1;
 }
