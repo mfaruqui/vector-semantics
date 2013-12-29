@@ -217,7 +217,7 @@ public:
     sampler.initialise(multinomial);
   }
     
-  void train_word_vectors(vector<unsigned>& words, unsigned nCores, double rate) {
+  void train_word_vec(vector<unsigned>& words, unsigned nCores, double rate) {
     unsigned tgtWrdIx;
     #pragma omp parallel for num_threads(nCores) private(tgtWrdIx)
     for (tgtWrdIx=0; tgtWrdIx<words.size(); ++tgtWrdIx) {
@@ -286,20 +286,20 @@ public:
         while (getline(inputFile, line)) {
           /* Extract normalized words from sentences */
           tokens = split_line(line, ' ');
-          for (unsigned j=0; j<tokens.size(); ++j){
+          for (unsigned j=0; j<tokens.size(); ++j) {
             token = tokens[j];
             if (word2norm.find(token) != word2norm.end())
               words.push_back(indexedVocab[word2norm[token]]);
-            }
-            /* Train word vectors now */
-            train_word_vectors(words, nCores, rate);
-            numWords += words.size();
-            cerr << int(numWords/1000) << "K\r";
-            words.clear();
           }
-          inputFile.close();
-          cerr << "\n";
+          /* Train word vectors now */
+          train_word_vec(words, nCores, rate);
+          numWords += words.size();
+          cerr << int(numWords/1000) << "K\r";
+          words.clear();
         }
+      inputFile.close();
+      cerr << "\n";
+      }
       else {
         cout << "\nUnable to open file\n";
         break;
