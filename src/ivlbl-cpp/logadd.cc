@@ -1,6 +1,8 @@
 #include <assert.h>
 #include <math.h>
 
+/* This is Jason Eisner's code, Noah sent in an email */
+
 double log_add(double lx, double ly)
 {
   /* REQUIRES !isnan(lx) && !isnan(ly) */
