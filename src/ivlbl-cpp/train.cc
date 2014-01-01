@@ -10,6 +10,7 @@
 #include <Eigen/Core>
 #include <iomanip>
 #include <random>
+#include "logadd.h"
 #include "alias_sampler.h"
 
 using namespace std;
@@ -70,25 +71,18 @@ pair<mapStrUnsigned, mapStrStr> get_vocab(string filename) {
   return make_pair(vocab, word2norm);
 }
 
-/* 
-It is not deleting stuff, dont know why !
-while prunsigneding its still there ! x-(
-http://stackoverflow.com/questions/17036428/c-map-element-doesnt-get-erased-if-i-refer-to-it
-*/
-mapStrUnsigned filter_vocab(mapStrUnsigned& vocab, const unsigned freqCutoff) {
-  mapStrUnsigned filtVocab;
+vector<string> filter_vocab(mapStrUnsigned& vocab, const unsigned freqCutoff) {
+  vector<string> filtVocab;
   for (mapStrUnsigned::iterator it = vocab.begin(); it != vocab.end(); ++it)
     if (! (it->second < freqCutoff) )
-      filtVocab[it->first] = it->second;
+      filtVocab.push_back(it->first);
   return filtVocab;
 }
 
-mapStrUnsigned reindex_vocab(mapStrUnsigned& vocab) {
-  unsigned index = 0;
+mapStrUnsigned reindex_vocab(vector<string> vocabList) {
   mapStrUnsigned indexedVocab;
-  for (mapStrUnsigned::iterator it = vocab.begin(); it != vocab.end(); ++it) {
-    string word = it->first;
-    indexedVocab[word] = index++;
+  for (unsigned i = 0; i < vocabList.size(); ++i) {
+    indexedVocab[vocabList[i]] = i;
   }
   return indexedVocab;
 }
@@ -96,10 +90,11 @@ mapStrUnsigned reindex_vocab(mapStrUnsigned& vocab) {
 mapUnsignedDouble get_log_unigram_dist(mapStrUnsigned& vocab, mapStrUnsigned& indexedVocab) {
   double sumFreq = 0;
   mapUnsignedDouble unigramDist;
-  for (mapStrUnsigned::iterator it = vocab.begin(); it != vocab.end(); ++it)
-    sumFreq += it->second;
-  for (mapStrUnsigned::iterator it = vocab.begin(); it != vocab.end(); ++it)
-    unigramDist[indexedVocab[it->first]] = log(it->second/sumFreq);
+  mapStrUnsigned::iterator it;
+  for (it = indexedVocab.begin(); it != indexedVocab.end(); ++it)
+    sumFreq += vocab[it->first];
+  for (it = indexedVocab.begin(); it != indexedVocab.end(); ++it)
+    unigramDist[it->second] = log(vocab[it->first]/sumFreq);
   return unigramDist;
 }
 
@@ -133,50 +128,36 @@ vector<RowVectorXf> random_vector(unsigned row, unsigned col) {
   return randVec;
 }
 
-void print_vectors(char* fileName, vector<RowVectorXf>& wordVectors, 
+void print_vectors(char* fileName, vector<RowVectorXf>& wordVectors,
                    mapStrUnsigned& indexedVocab) {
   ofstream outFile(fileName);
-  for (mapStrUnsigned::iterator it=indexedVocab.begin(); it!= indexedVocab.end(); it++){
-    /* This check is wrong but I have to put it, coz of the elements not getting deleted :(
-    By this we will be missing the word at index 0. */
-    if (it->second != 0){
-      outFile << it->first << " ";
-      for (unsigned i=0; i != wordVectors[it->second].size(); ++i)
-        outFile << wordVectors[it->second][i] << " ";
-      outFile << "\n";
-    }
+  mapStrUnsigned::iterator it;
+  for (it=indexedVocab.begin(); it!= indexedVocab.end(); it++) {
+    outFile << it->first << " ";
+    for (unsigned i=0; i != wordVectors[it->second].size(); ++i)
+      outFile << wordVectors[it->second][i] << " ";
+    outFile << "\n";
   }
-}
-/* =================== Utility functions end =================== */
-
-double diff_score_word_noise(unsigned word, vector<unsigned>& contextWords,
-                             mapUnsignedDouble& noiseDist,
-                             RowVectorXf& wordBiases,
-                             vector<RowVectorXf>& wordVectors,
-                             double logNumNoiseWords) {                     
-  double sumScore = 0;
-  for (unsigned i=0; i<contextWords.size(); ++i)
-    sumScore += wordVectors[word].dot(wordVectors[contextWords[i]]) + wordBiases[contextWords[i]];
-  return sumScore - logNumNoiseWords - noiseDist[word];
 }
 
 /* Main class definition that learns the word vectors */
 
 class WordVectorLearner {
   mapStrUnsigned vocab;
+  vector<string> filtVocabList;
   mapUnsignedDouble noiseDist;
   mapStrStr word2norm;
   unsigned vocabSize, windowSize, numNoiseWords, freqCutoff, vecLen;
   double learningRate, logNumNoiseWords;
-  string corpusName;
   vector<RowVectorXf> adagradVecMem;
-  RowVectorXf wordBiases, adagradBiasMem;
+  RowVectorXf adagradBiasMem;
   /* For sampling noise words */
   AliasSampler sampler;
     
 public:
       
   vector<RowVectorXf> wordVectors;
+  RowVectorXf wordBiases;
   mapStrUnsigned indexedVocab;
       
   WordVectorLearner(unsigned window, unsigned freq, unsigned noiseWords, unsigned vectorLen) {
@@ -192,9 +173,9 @@ public:
     vocab = vocabPair.first;
     word2norm = vocabPair.second;
     cerr << "Orig vocab " << vocab.size() << "\n";
-    vocab = filter_vocab(vocab, freqCutoff);
-    cerr << "Filtered vocab " << vocab.size() << "\n";
-    indexedVocab = reindex_vocab(vocab);
+    filtVocabList = filter_vocab(vocab, freqCutoff);
+    cerr << "Filtered vocab " << filtVocabList.size() << "\n";
+    indexedVocab = reindex_vocab(filtVocabList);
     vocabSize = indexedVocab.size();
   }
     
@@ -205,17 +186,82 @@ public:
     adagradBiasMem = epsilon_vector(vocabSize);
   }
     
-  void set_noise_dist() { 
+  void set_noise_dist() {
     noiseDist = get_log_unigram_dist(vocab, indexedVocab);
     vector<double> multinomial(vocabSize, 0.0);
     for (mapUnsignedDouble::iterator it = noiseDist.begin(); it != noiseDist.end(); ++it)
       multinomial[it->first] = exp(it->second);
     sampler.initialise(multinomial);
   }
+  
+  double diff_score_word_noise(unsigned word, vector<unsigned>& contextWords) {                   
+    double sumScore = 0;
+    for (unsigned i=0; i<contextWords.size(); ++i) {
+      sumScore += wordVectors[word].dot(wordVectors[contextWords[i]]);
+      sumScore += wordBiases[contextWords[i]];
+    }
+    return sumScore - logNumNoiseWords - noiseDist[word];
+  }
+  
+  double log_lh(string corpus, unsigned nCores) {
+    mapUnsignedDouble wordVocabScore;
+    for (unsigned i=0; i<filtVocabList.size(); ++i) {
+      unsigned word1 = indexedVocab[filtVocabList[i]], j;
+      double logExpSum = 0;
+      #pragma omp parallel for num_threads(2*nCores) shared(logExpSum) private(j)
+      for (j=0; j<filtVocabList.size(); ++j) {
+        if (j == i) continue;
+        unsigned word2 = indexedVocab[filtVocabList[j]];
+        double pairScore = wordVectors[word1].dot(wordVectors[word2]);
+        pairScore += wordBiases[word2];
+        logExpSum = log_add(pairScore, logExpSum);
+      }
+      wordVocabScore[word1] = logExpSum;
+    }
+    
+    double lh = 0;
+    ifstream inputFile(corpus.c_str());
+    string line, normWord, token;
+    vector<string> tokens;
+    vector<unsigned> words;
+    if (inputFile.is_open()) {
+      while (getline(inputFile, line)) {
+        /* Extract normalized words from sentences */
+        tokens = split_line(line, ' ');
+        words.clear();
+        for (unsigned j=0; j<tokens.size(); ++j) {
+          token = tokens[j];
+          if (word2norm.find(token) != word2norm.end())
+            words.push_back(indexedVocab[word2norm[token]]);
+        }
+        #pragma omp parallel for num_threads(nCores) shared(lh)
+        for (unsigned tgtWrdIx=0; tgtWrdIx<words.size(); ++tgtWrdIx) {
+          /* Get the words in the window context of the target word */
+          vector<unsigned> contextWords;
+          unsigned start, end, sentLen = words.size(), tgtWord=words[tgtWrdIx];
+          start = (tgtWrdIx <= windowSize)? 0: tgtWrdIx-windowSize;
+          end = (sentLen-tgtWrdIx <= windowSize)? sentLen-1: tgtWrdIx+windowSize;
+          for (unsigned i=start; i<=end; ++i)
+            if (i != tgtWrdIx)
+              contextWords.push_back(words[i]);
+          /* Score word in context now */
+          double x = diff_score_word_noise(tgtWord, contextWords);
+          double contextScore = (x>MAX_EXP)? 1: (x<-MAX_EXP? 0: 1/(1+exp(-x)));
+          /* log likelihood */
+          lh += contextScore - contextWords.size()*wordVocabScore[tgtWord];
+        }
+      }
+    inputFile.close();
+    }
+    else
+      cout << "\nUnable to open file\n";
+  return lh;
+  }
     
   void train_word_vec(vector<unsigned>& words, unsigned nCores, double rate) {
     unsigned tgtWrdIx;
-    #pragma omp parallel for num_threads(nCores) private(tgtWrdIx)
+    #pragma omp parallel num_threads(nCores)
+    #pragma omp for nowait private(tgtWrdIx)
     for (tgtWrdIx=0; tgtWrdIx<words.size(); ++tgtWrdIx) {
       /* Get the words in the window context of the target word */
       vector<unsigned> contextWords;
@@ -226,9 +272,7 @@ public:
         if (i != tgtWrdIx)
           contextWords.push_back(words[i]);
       /* Get the diff of score of the word in context and the noise dist */
-      double x = diff_score_word_noise(tgtWord, contextWords,
-                                       noiseDist, wordBiases, wordVectors,
-                                       logNumNoiseWords);
+      double x = diff_score_word_noise(tgtWord, contextWords);
       double wordContextScore = (x>MAX_EXP)? 1: (x<-MAX_EXP? 0: 1/(1+exp(-x)));
       /* Select noise words for this target word */
       unsigned noiseWords[numNoiseWords];
@@ -239,9 +283,7 @@ public:
       noiseScoreGradProd.setZero(noiseScoreGradProd.size());
       double noiseScoreSum=0;
       for (unsigned j=0; j<numNoiseWords; ++j) {
-        double y = diff_score_word_noise(noiseWords[j], contextWords,
-                                         noiseDist, wordBiases, wordVectors,
-                                         logNumNoiseWords);
+        double y = diff_score_word_noise(noiseWords[j], contextWords);
         double noiseScore = (y>MAX_EXP)? 1: (y<-MAX_EXP? 0: 1/(1+exp(-y)));
         noiseScoreSum += noiseScore;
         noiseScoreGradProd += noiseScore * wordVectors[noiseWords[j]];
@@ -294,10 +336,11 @@ public:
           words.clear();
         }
       inputFile.close();
+      cerr << "Log likelihood: " << log_lh(corpus, nCores);
       cerr << "\n";
       }
       else {
-        cout << "\nUnable to open file\n";
+        cerr << "\nUnable to open file\n";
         break;
       }
     }
@@ -307,10 +350,10 @@ public:
 int main(int argc, char **argv){
   string corpus = "../10k";
   unsigned window = 5, freqCutoff = 2, noiseWords = 10, vectorLen = 80;
-  unsigned numIter = 1, numCores = 6;
+  unsigned numIter = 5, numCores = 6;
   double rate = 0.05;
   
-  WordVectorLearner obj (window, freqCutoff, noiseWords, vectorLen);
+  WordVectorLearner obj(window, freqCutoff, noiseWords, vectorLen);
   obj.train_on_corpus(corpus, numIter, numCores, rate);
   print_vectors("y.txt", obj.wordVectors, obj.indexedVocab);
   return 1;
