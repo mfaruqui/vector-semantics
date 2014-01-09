@@ -4,7 +4,7 @@
 #include <functional>
 #include <numeric>
 #include <cmath>
-#include <ctime>
+#include <time.h>
 #include <string>
 #include <tr1/unordered_map>
 #include <Eigen/Core>
@@ -50,7 +50,8 @@ public:
   RowVectorXf wordBiases;
   mapStrUnsigned indexedVocab;
       
-  WordVectorLearner(unsigned window, unsigned freq, unsigned noiseWords, unsigned vectorLen) {
+  WordVectorLearner(unsigned window, unsigned freq, unsigned noiseWords, 
+                    unsigned vectorLen) {
     windowSize = window;
     freqCutoff = freq;
     numNoiseWords = noiseWords;
@@ -79,12 +80,13 @@ public:
   void set_noise_dist() {
     noiseDist = get_log_unigram_dist(vocab, indexedVocab);
     vector<double> multinomial(vocabSize, 0.0);
-    for (mapUnsignedDouble::iterator it = noiseDist.begin(); it != noiseDist.end(); ++it)
+    mapUnsignedDouble::iterator it;
+    for (it = noiseDist.begin(); it != noiseDist.end(); ++it)
       multinomial[it->first] = exp(it->second);
     sampler.initialise(multinomial);
   }
   
-  double diff_score_word_noise(unsigned word, vector<unsigned>& contextWords) {                   
+  double diff_score_word_noise(unsigned word, vector<unsigned>& contextWords) {          
     double sumScore = 0;
     for (unsigned i=0; i<contextWords.size(); ++i) {
       sumScore += wordVectors[word].dot(wordVectors[contextWords[i]]);
@@ -98,33 +100,32 @@ public:
     for (unsigned i=0; i<filtVocabList.size(); ++i) {
       unsigned word1 = indexedVocab[filtVocabList[i]], j;
       double logExpSum = 0;
-      #pragma omp parallel for num_threads(2*nCores) shared(logExpSum) private(j)
+      #pragma omp parallel for num_threads(nCores) shared(logExpSum) private(j)
       for (j=0; j<filtVocabList.size(); ++j) {
-        if (j == i) continue;
         unsigned word2 = indexedVocab[filtVocabList[j]];
         double pairScore = wordVectors[word1].dot(wordVectors[word2]);
         pairScore += wordBiases[word2];
         logExpSum = log_add(pairScore, logExpSum);
       }
       wordVocabScore[word1] = logExpSum;
+      cerr << int(i/1000) << "K\r";
     }
     
     double lh = 0;
     ifstream inputFile(corpus.c_str());
     string line, normWord, token;
-    vector<string> tokens;
     vector<unsigned> words;
     if (inputFile.is_open()) {
       while (getline(inputFile, line)) {
         /* Extract normalized words from sentences */
-        tokens = split_line(line, ' ');
+        vector<string> tokens = split_line(line, ' ');
         words.clear();
         for (unsigned j=0; j<tokens.size(); ++j) {
           token = tokens[j];
           if (word2norm.find(token) != word2norm.end())
             words.push_back(indexedVocab[word2norm[token]]);
         }
-        #pragma omp parallel for num_threads(nCores) shared(lh)
+        #pragma omp parallel for num_threads(nCores/2) shared(lh)
         for (unsigned tgtWrdIx=0; tgtWrdIx<words.size(); ++tgtWrdIx) {
           unsigned tgtWord = words[tgtWrdIx];
           /* Get the words in the window context of the target word */
@@ -142,7 +143,7 @@ public:
       cout << "\nUnable to open file\n";
   return lh;
   }
-    
+  
   void train_word_vec(vector<unsigned>& words, unsigned nCores, double rate) {
     unsigned tgtWrdIx;
     #pragma omp parallel num_threads(nCores)
@@ -170,7 +171,8 @@ public:
       }
       /* Grad wrt bias is one, grad wrt contextWord is the target word */
       double updateInBias = 1 - wordContextScore - noiseScoreSum;
-      RowVectorXf updateInVec = (1-wordContextScore) * wordVectors[tgtWord] - noiseScoreGradProd;
+      RowVectorXf updateInVec = (1-wordContextScore) * wordVectors[tgtWord];
+      updateInVec -= noiseScoreGradProd;
       /* Update adagrad params and add the updates to the context words now */
       RowVectorXf updateVecSquare = updateInVec.array().square();
       double updateBiasSquare = updateInBias*updateInBias;
@@ -182,28 +184,32 @@ public:
         /* Now apply the updates */
         RowVectorXf temp = adagradVecMem[contextWord].array().sqrt();
         wordVectors[contextWord] += rate * updateInVec.cwiseQuotient(temp);
-        wordBiases[contextWord] += rate * updateInBias / sqrt(adagradBiasMem[contextWord]);
+        updateInBias *= rate / sqrt(adagradBiasMem[contextWord]);
+        wordBiases[contextWord] += updateInBias;
       }
     }
   }
 
-  void train_on_corpus(string corpus, unsigned iter, unsigned nCores, double lRate) {
+  void 
+  train_on_corpus(string corpus, unsigned iter, unsigned nCores, double lRate) {
     preprocess_vocab(corpus);
     init_vectors(vocabSize, vecLen);
     set_noise_dist();
     for (unsigned i=0; i<iter; ++i) {
       double rate = lRate/(i+1);
-      cerr << "Iteration: " << i+1 << "\n";
+      cerr << "\nIteration: " << i+1 << "\n";
       cerr << "Learning rate: " << rate << "\n";
       ifstream inputFile(corpus.c_str());
       string line, normWord, token;
-      vector<string> tokens;
       vector<unsigned> words;
       unsigned numWords = 0;
       if (inputFile.is_open()) {
+        time_t start, end;
+        time(&start);
         while (getline(inputFile, line)) {
           /* Extract normalized words from sentences */
-          tokens = split_line(line, ' ');
+          vector<string> tokens = split_line(line, ' ');
+          words.clear();
           for (unsigned j=0; j<tokens.size(); ++j) {
             token = tokens[j];
             if (word2norm.find(token) != word2norm.end())
@@ -213,11 +219,14 @@ public:
           train_word_vec(words, nCores, rate);
           numWords += words.size();
           cerr << int(numWords/1000) << "K\r";
-          words.clear();
         }
-      inputFile.close();
-      //cerr << "Log likelihood: " << log_lh(corpus, nCores);
-      cerr << "\n";
+        inputFile.close();
+        time(&end);
+        cerr << "Time taken: " << float(difftime(end,start)/3600) << " hrs\n";
+        time(&start);
+        cerr << "Log likelihood: " << log_lh(corpus, 2*nCores) << "\n";
+        time(&end);
+        cerr << "Time taken: " << float(difftime(end,start)/60) << " mins\n";
       }
       else {
         cerr << "\nUnable to open file\n";
@@ -230,11 +239,11 @@ public:
 int main(int argc, char **argv){
   string corpus = "../10k";
   unsigned window = 5, freqCutoff = 2, noiseWords = 10, vectorLen = 80;
-  unsigned numIter = 5, numCores = 6;
+  unsigned numIter = 3, numCores = 6;
   double rate = 0.05;
   
   WordVectorLearner obj(window, freqCutoff, noiseWords, vectorLen);
   obj.train_on_corpus(corpus, numIter, numCores, rate);
-  print_vectors("y.txt", obj.wordVectors, obj.indexedVocab);
+  print_vectors("y", obj.wordVectors, obj.indexedVocab);
   return 1;
 }
