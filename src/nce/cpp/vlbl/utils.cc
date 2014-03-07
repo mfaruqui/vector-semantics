@@ -115,6 +115,17 @@ mapUnsignedDouble get_log_unigram_dist(mapStrUnsigned& vocab, mapStrUnsigned& in
   return unigramDist;
 }
 
+mapUnsignedDouble get_unigram_dist(mapStrUnsigned& vocab, mapStrUnsigned& indexedVocab) {
+  double sumFreq = 0;
+  mapUnsignedDouble unigramDist;
+  mapStrUnsigned::iterator it;
+  for (it = indexedVocab.begin(); it != indexedVocab.end(); ++it)
+    sumFreq += vocab[it->first];
+  for (it = indexedVocab.begin(); it != indexedVocab.end(); ++it)
+    unigramDist[it->second] = vocab[it->first]/sumFreq;
+  return unigramDist;
+}
+
 RowVectorXf epsilon_vector(unsigned row) {
   RowVectorXf nonZeroVec(row);
   nonZeroVec.setOnes(row);

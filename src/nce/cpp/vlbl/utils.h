@@ -27,6 +27,7 @@ vector<string> filter_vocab(mapStrUnsigned& vocab, const unsigned freqCutoff);
 mapStrUnsigned reindex_vocab(vector<string> vocabList);
 
 mapUnsignedDouble get_log_unigram_dist(mapStrUnsigned& vocab, mapStrUnsigned& indexedVocab);
+mapUnsignedDouble get_unigram_dist(mapStrUnsigned& vocab, mapStrUnsigned& indexedVocab);
 
 RowVectorXf epsilon_vector(unsigned row);
 vector<RowVectorXf> epsilon_vector(unsigned row, unsigned col);
