@@ -15,12 +15,14 @@ using namespace Eigen;
 typedef std::tr1::unordered_map<string, unsigned> mapStrUnsigned;
 typedef std::tr1::unordered_map<string, string> mapStrStr;
 typedef std::tr1::unordered_map<unsigned, double> mapUnsignedDouble;
+typedef std::tr1::unordered_map<unsigned, vector<unsigned>> mapLexParaP;
 
 string normalize_word(string& word);
 
 vector<string> split_line(string& line, char delim);
 
 pair<mapStrUnsigned, mapStrStr> get_vocab(string filename);
+mapLexParaP read_lex_parap(string filename, mapStrUnsigned& indexedVocab);
 vector<string> filter_vocab(mapStrUnsigned& vocab, const unsigned freqCutoff);
 mapStrUnsigned reindex_vocab(vector<string> vocabList);
 

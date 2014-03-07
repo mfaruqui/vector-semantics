@@ -26,6 +26,45 @@ vector<string> split_line(string& line, char delim) {
   return words;
 }
 
+/* Reads lexical paraphrases from the input file in the following format:
+  fromWord toWord1 toWord2 toWord3 */
+mapLexParaP read_lex_parap(string filename, mapStrUnsigned& indexedVocab) {
+  string line, normWord, fromWord;
+  vector<string> words;
+  mapLexParaP lexParaP;
+  unsigned numParaP=0;
+  ifstream myfile(filename.c_str());
+  if (myfile.is_open()) {
+    while(getline(myfile, line)) {
+      words = split_line(line, ' ');
+      fromWord = normalize_word(words[0]);
+      /* If fromWord present in vocab */
+      if (indexedVocab.find(fromWord) != indexedVocab.end()) {
+        vector<unsigned> toWordsInVocab;
+        /* process the toWords which are second word onwards */
+        for (unsigned i=1; i<words.size(); ++i) {
+          string toWordNorm = normalize_word(words[i]);
+          /* see if the toWord is present in vocab */
+          if (indexedVocab.find(toWordNorm) != indexedVocab.end()) {
+            toWordsInVocab.push_back(indexedVocab[toWordNorm]);
+            numParaP += 1;
+          }
+        }
+        lexParaP[indexedVocab[fromWord]] = toWordsInVocab;
+        toWordsInVocab.erase(toWordsInVocab.begin(), toWordsInVocab.end());
+      }
+    }
+    myfile.close();
+    cerr << "\n" << "Read the paraphrase file" << "\n";
+    cerr << "Words with paraphrases: " << lexParaP.size() << "\n";
+    if (lexParaP.size() > 0)
+      cerr << "Avg lex pPhrases/word: " << numParaP/lexParaP.size() << "\n";
+  }
+  else
+    cerr << "\n" << "Unable to open paraphrase corpus" << "\n";
+  return lexParaP;
+}
+
 pair<mapStrUnsigned, mapStrStr> get_vocab(string filename) {
   string line, normWord;
   vector<string> words;
