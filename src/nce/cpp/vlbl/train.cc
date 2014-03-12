@@ -16,6 +16,8 @@
 using namespace std;
 using namespace Eigen;
 
+#define MAX_EXP 10
+
 vector<unsigned> 
 context(vector<unsigned>& words, unsigned tgtWrdIx, unsigned windowSize) {
   vector<unsigned> contextWords;
@@ -76,18 +78,17 @@ public:
   }
     
   void set_noise_dist() {
-    noiseDist = get_unigram_dist(vocab, indexedVocab);
+    noiseDist = get_log_unigram_dist(vocab, indexedVocab);
     vector<double> multinomial(vocabSize, 0.0);
     mapUnsignedDouble::iterator it;
     for (it = noiseDist.begin(); it != noiseDist.end(); ++it)
-      multinomial[it->first] = it->second;
+      multinomial[it->first] = exp(it->second);
     sampler.initialise(multinomial);
   }
   
-  double prob_word_context(unsigned word, RowVectorXf contextWordAvg) {       
-    double sumScore = wordVectors[word].dot(contextWordAvg);
-    sumScore += wordBiases[word];
-    return exp(sumScore);
+  double score_word_context(unsigned word, RowVectorXf contextVec, 
+                                double biasSum) {          
+    return wordVectors[word].dot(contextVec) + biasSum;
   }
   
   double log_lh(string corpus, unsigned nCores) {
@@ -111,17 +112,20 @@ public:
         for (tgtWrdIx=0; tgtWrdIx<words.size(); ++tgtWrdIx) {
           unsigned tgtWord = words[tgtWrdIx];
           vector<unsigned> contextWords = context(words, tgtWrdIx, windowSize);
+          if (contextWords.size() < 1) continue;
           /* Get the sum of context vectors */
-          RowVectorXf contextVecAvg(vecLen);contextVecAvg.setZero(vecLen);
-          for (unsigned c=0; c<contextWords.size(); ++c)
-            contextVecAvg += wordVectors[contextWords[c]];
-          contextVecAvg /= contextWords.size();
-          double contextScore = log(prob_word_context(tgtWord, contextVecAvg));
+          RowVectorXf contextVec(vecLen);contextVec.setZero(vecLen);
+          double biasSum = 0;
+          for (unsigned c=0; c<contextWords.size(); ++c) {
+            contextVec += wordVectors[contextWords[c]];
+            biasSum += wordBiases[contextWords[c]];
+          }
+          double contextScore = score_word_context(tgtWord, contextVec, biasSum);
           /* Get vocab context score */
           double vocabContextScore = 0;
           for (unsigned v=0; v<filtVocabList.size(); ++v) {
             unsigned vWord = indexedVocab[filtVocabList[v]];
-            double scoreWordContext = log(prob_word_context(vWord, contextVecAvg));
+            double scoreWordContext = score_word_context(vWord, contextVec, biasSum);
             vocabContextScore = log_add(vocabContextScore, scoreWordContext);
           }
           #pragma omp critical
@@ -143,62 +147,62 @@ public:
       unsigned tgtWord = words[tgtWrdIx];
       /* Get the words in the window context of the target word */
       vector<unsigned> contextWords = context(words, tgtWrdIx, windowSize);
-      /* Get the sum of context vectors */
-      RowVectorXf contextVecAvg(vecLen);contextVecAvg.setZero(vecLen);
-      for (unsigned c=0; c<contextWords.size(); ++c)
-        contextVecAvg += wordVectors[contextWords[c]];
-      contextVecAvg /= contextWords.size();
+      RowVectorXf contextVec(vecLen);contextVec.setZero(vecLen);
+      double contextBias = 0;
+      for (unsigned c=0; c<contextWords.size(); ++c) {
+        contextVec += wordVectors[contextWords[c]];
+        contextBias += wordBiases[contextWords[c]];
+      }
       /* Get the ratio of probab scores of theta and noise */
-      double pThetaTgt = prob_word_context(tgtWord, contextVecAvg);
-      double pNoiseTgt = numNoiseWords*noiseDist[tgtWord];
-      double pNoiseToThetaTgt = pNoiseTgt/(pNoiseTgt+pThetaTgt);
+      double lpThetaTgt = score_word_context(tgtWord, contextVec, contextBias);
+      double lpNoiseTgt = logNumNoiseWords+noiseDist[tgtWord];
+      double pNoiseToThetaTgt = 1/(1+exp(lpThetaTgt-lpNoiseTgt));
+      assert (isfinite(pNoiseToThetaTgt));
       /* Select noise words for this target word */
       unsigned noiseWords[numNoiseWords];
       for (unsigned selWrds=0; selWrds<numNoiseWords; ++selWrds)
         noiseWords[selWrds] = sampler.Draw();
-      /* Marginalization over noise words */
+      /* Get the diff of score of noise words in context and the noise dist */
       RowVectorXf pThetaToNoiseGradProd(vecLen);
       pThetaToNoiseGradProd.setZero(vecLen);
       double pThetaToNoiseSum=0;
       for (unsigned j=0; j<numNoiseWords; ++j) {
-        double pTheta = prob_word_context(noiseWords[j], contextVecAvg);
-        double pNoise = numNoiseWords*noiseDist[noiseWords[j]];
-        double pThetaToNoise = pTheta/(pNoise+pTheta);
+        double lpTheta = score_word_context(noiseWords[j], contextVec, contextBias);
+        double lpNoise = logNumNoiseWords+noiseDist[noiseWords[j]];
+        double pThetaToNoise = 1-1/(1+exp(lpTheta-lpNoise));
+        assert (isfinite(pThetaToNoise));
         pThetaToNoiseSum += pThetaToNoise;
-        pThetaToNoiseGradProd += pThetaToNoise*wordVectors[noiseWords[j]];
+        pThetaToNoiseGradProd += pThetaToNoise * wordVectors[noiseWords[j]];
       }
-      /* Calculating context word update */
-      RowVectorXf delContextVec = pNoiseToThetaTgt * wordVectors[tgtWord];
-      delContextVec -= pThetaToNoiseGradProd;
-      delContextVec /= contextWords.size();
-      /* Update the target word vector and bias */
-      RowVectorXf delTgtVec = pNoiseToThetaTgt*contextVecAvg;
-      double delTgtBias = pNoiseToThetaTgt;
-      update(tgtWord, contextWords, delTgtVec, delTgtBias, delContextVec, rate);
+      /* Grad wrt bias is one, grad wrt contextWord is the target word */
+      double updateInBias = pNoiseToThetaTgt - pThetaToNoiseSum;
+      RowVectorXf updateInVec = pNoiseToThetaTgt * wordVectors[tgtWord];
+      updateInVec -= pThetaToNoiseGradProd;
+      update(contextWords, updateInVec, updateInBias, rate);
+      /* Also update target word */
+      RowVectorXf delTgtVec = pNoiseToThetaTgt * contextVec;
+      RowVectorXf delTgtVecSq = delTgtVec.array().square();
+      adagradVecMem[tgtWord] += delTgtVecSq;
+      RowVectorXf temp = adagradVecMem[tgtWord].array().sqrt();
+      wordVectors[tgtWord] += rate * delTgtVec.cwiseQuotient(temp); 
     }
   }
   
-  void 
-  update(unsigned tgtWord, vector<unsigned>& context, RowVectorXf delTgtVec, 
-         double delTgtBias, RowVectorXf delContextVec, double rate) {
-    /* Update the context vectors */
-    RowVectorXf delContextVecSquare = delContextVec.array().square();
-    for (unsigned k=0; k<context.size(); ++k) {
-      unsigned contextWord = context[k];
-      adagradVecMem[contextWord] += delContextVecSquare;
+  void update(vector<unsigned>& contextWords, RowVectorXf updateInVec,
+         double updateInBias, double rate) {
+    RowVectorXf updateVecSquare = updateInVec.array().square();
+    double updateBiasSquare = updateInBias*updateInBias;
+    for (unsigned k=0; k<contextWords.size(); ++k) {
+      unsigned contextWord = contextWords[k];
+      /* Update the adagrad memory first */
+      adagradVecMem[contextWord] += updateVecSquare;
+      adagradBiasMem[contextWord] += updateBiasSquare;
+      /* Now apply the updates */
       RowVectorXf temp = adagradVecMem[contextWord].array().sqrt();
-      wordVectors[contextWord] += rate * delContextVec.cwiseQuotient(temp);
+      wordVectors[contextWord] += rate * updateInVec.cwiseQuotient(temp);
+      updateInBias *= rate / sqrt(adagradBiasMem[contextWord]);
+      wordBiases[contextWord] += updateInBias;
     }
-    /* Update the target word vector */
-    RowVectorXf delTgtVecSquare = delTgtVec.array().square();
-    adagradVecMem[tgtWord] += delTgtVecSquare;
-    RowVectorXf temp = adagradVecMem[tgtWord].array().sqrt();
-    wordVectors[tgtWord] += rate * delTgtVec.cwiseQuotient(temp);
-    /* Update target bias */
-    double delTgtBiasSquare = delTgtBias*delTgtBias;
-    adagradBiasMem[tgtWord] += delTgtBiasSquare;
-    double tempBias = sqrt(adagradBiasMem[tgtWord]);
-    wordBiases[tgtWord] += rate * delTgtBias/tempBias;
   }
 
   void 
@@ -250,9 +254,9 @@ public:
 };
 
 int main(int argc, char **argv){
-  string corpus = "../10";
+  string corpus = "../100";
   unsigned window = 5, freqCutoff = 1, noiseWords = 10, vectorLen = 80;
-  unsigned numIter = 5, numCores = 10;
+  unsigned numIter = 5, numCores = 5;
   double rate = 0.05;
   
   WordVectorLearner obj(window, freqCutoff, noiseWords, vectorLen);
