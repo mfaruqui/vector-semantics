@@ -86,9 +86,13 @@ public:
     sampler.initialise(multinomial);
   }
   
-  double score_word_context(unsigned word, RowVectorXf contextVec, 
-                                double biasSum) {          
-    return wordVectors[word].dot(contextVec) + biasSum;
+  double prob_model_to_noise(unsigned tgtWord, RowVectorXf contextVec, 
+                             double biasSum) {
+    double lpThetaTgt = wordVectors[tgtWord].dot(contextVec) + biasSum;
+    double lpNoiseTgt = logNumNoiseWords+noiseDist[tgtWord];
+    double pNoiseToThetaTgt = 1/(1+exp(lpThetaTgt-lpNoiseTgt));
+    assert (isfinite(pNoiseToThetaTgt));
+    return 1-pNoiseToThetaTgt;
   }
   
   double log_lh(string corpus, unsigned nCores) {
@@ -120,12 +124,12 @@ public:
             contextVec += wordVectors[contextWords[c]];
             biasSum += wordBiases[contextWords[c]];
           }
-          double contextScore = score_word_context(tgtWord, contextVec, biasSum);
+          double contextScore = wordVectors[tgtWord].dot(contextVec) + biasSum;
           /* Get vocab context score */
           double vocabContextScore = 0;
           for (unsigned v=0; v<filtVocabList.size(); ++v) {
             unsigned vWord = indexedVocab[filtVocabList[v]];
-            double scoreWordContext = score_word_context(vWord, contextVec, biasSum);
+            double scoreWordContext = wordVectors[vWord].dot(contextVec) + biasSum;
             vocabContextScore = log_add(vocabContextScore, scoreWordContext);
           }
           #pragma omp critical
@@ -154,10 +158,8 @@ public:
         contextBias += wordBiases[contextWords[c]];
       }
       /* Get the ratio of probab scores of theta and noise */
-      double lpThetaTgt = score_word_context(tgtWord, contextVec, contextBias);
-      double lpNoiseTgt = logNumNoiseWords+noiseDist[tgtWord];
-      double pNoiseToThetaTgt = 1/(1+exp(lpThetaTgt-lpNoiseTgt));
-      assert (isfinite(pNoiseToThetaTgt));
+      double pNoiseToThetaTgt = 1-prob_model_to_noise(tgtWord, contextVec,
+                                                      contextBias);
       /* Select noise words for this target word */
       unsigned noiseWords[numNoiseWords];
       for (unsigned selWrds=0; selWrds<numNoiseWords; ++selWrds)
@@ -167,41 +169,41 @@ public:
       pThetaToNoiseGradProd.setZero(vecLen);
       double pThetaToNoiseSum=0;
       for (unsigned j=0; j<numNoiseWords; ++j) {
-        double lpTheta = score_word_context(noiseWords[j], contextVec, contextBias);
-        double lpNoise = logNumNoiseWords+noiseDist[noiseWords[j]];
-        double pThetaToNoise = 1-1/(1+exp(lpTheta-lpNoise));
-        assert (isfinite(pThetaToNoise));
+        double pThetaToNoise = prob_model_to_noise(noiseWords[j], contextVec,
+                                                   contextBias);
         pThetaToNoiseSum += pThetaToNoise;
         pThetaToNoiseGradProd += pThetaToNoise * wordVectors[noiseWords[j]];
       }
-      /* Grad wrt bias is one, grad wrt contextWord is the target word */
-      double updateInBias = pNoiseToThetaTgt - pThetaToNoiseSum;
-      RowVectorXf updateInVec = pNoiseToThetaTgt * wordVectors[tgtWord];
-      updateInVec -= pThetaToNoiseGradProd;
-      update(contextWords, updateInVec, updateInBias, rate);
-      /* Also update target word */
+      /* Calculate updates */
       RowVectorXf delTgtVec = pNoiseToThetaTgt * contextVec;
-      RowVectorXf delTgtVecSq = delTgtVec.array().square();
-      adagradVecMem[tgtWord] += delTgtVecSq;
-      RowVectorXf temp = adagradVecMem[tgtWord].array().sqrt();
-      wordVectors[tgtWord] += rate * delTgtVec.cwiseQuotient(temp); 
+      double delConBias = pNoiseToThetaTgt - pThetaToNoiseSum;
+      RowVectorXf delConVec = pNoiseToThetaTgt * wordVectors[tgtWord];
+      delConVec -= pThetaToNoiseGradProd;
+      /* Apply the updates */
+      update(tgtWord, contextWords, delTgtVec, delConVec, delConBias, rate);
     }
   }
   
-  void update(vector<unsigned>& contextWords, RowVectorXf updateInVec,
-         double updateInBias, double rate) {
-    RowVectorXf updateVecSquare = updateInVec.array().square();
-    double updateBiasSquare = updateInBias*updateInBias;
+  void update(unsigned tgtWord, vector<unsigned>& contextWords, 
+              RowVectorXf delTgtVec, RowVectorXf delConVec, double delConBias,
+              double rate) {
+    /* Update the target word vector */
+    RowVectorXf delTgtVecSq = delTgtVec.array().square();
+    adagradVecMem[tgtWord] += delTgtVecSq;
+    RowVectorXf temp = adagradVecMem[tgtWord].array().sqrt();
+    wordVectors[tgtWord] += rate * delTgtVec.cwiseQuotient(temp); 
+    /* Update the context word vectors */
+    RowVectorXf delConVecSq = delConVec.array().square();
+    double delConBiasSq = delConBias * delConBias;
     for (unsigned k=0; k<contextWords.size(); ++k) {
-      unsigned contextWord = contextWords[k];
+      unsigned conWord = contextWords[k];
       /* Update the adagrad memory first */
-      adagradVecMem[contextWord] += updateVecSquare;
-      adagradBiasMem[contextWord] += updateBiasSquare;
+      adagradVecMem[conWord] += delConVecSq;
+      adagradBiasMem[conWord] += delConBiasSq;
       /* Now apply the updates */
-      RowVectorXf temp = adagradVecMem[contextWord].array().sqrt();
-      wordVectors[contextWord] += rate * updateInVec.cwiseQuotient(temp);
-      updateInBias *= rate / sqrt(adagradBiasMem[contextWord]);
-      wordBiases[contextWord] += updateInBias;
+      RowVectorXf temp = adagradVecMem[conWord].array().sqrt();
+      wordVectors[conWord] += rate*delConVec.cwiseQuotient(temp);
+      wordBiases[conWord] += rate*delConBias/sqrt(adagradBiasMem[conWord]);
     }
   }
 
