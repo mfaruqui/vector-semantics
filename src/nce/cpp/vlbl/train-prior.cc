@@ -33,7 +33,7 @@ context(vector<unsigned>& words, unsigned tgtWrdIx, unsigned windowSize) {
 class WordVectorLearner {
   mapStrUnsigned vocab;
   vector<string> filtVocabList;
-  mapUnsignedDouble noiseDist, logPriorDict;
+  mapUnsignedDouble noiseDist;
   mapStrStr word2norm;
   unsigned vocabSize, windowSize, numNoiseWords, freqCutoff, vecLen;
   double learningRate, logNumNoiseWords, corpusSize, logPrior;
@@ -76,20 +76,29 @@ public:
     adagradBiasMem = epsilon_vector(vocabSize);
   }
   
-  /* Compute total prior and prior contribution of words */
-  void compute_prior(mapLexParaP& pp) {
-    for (auto it = pp.begin(); it != pp.end(); ++it) {
-      double distance = 0;
+  /* Compute total prior */
+  double compute_and_set_prior(mapLexParaP& pp, double priorWt) {
+    logPrior = 0;
+    for (auto it = pp.begin(); it != pp.end(); ++it) 
       for (unsigned i=0; i<pp[it->first].size(); ++i) {
         unsigned ppWord = pp[it->first][i];
         RowVectorXf delVec = wordVectors[it->first]-wordVectors[ppWord];
-        distance += delVec.squaredNorm();
+        logPrior -= delVec.squaredNorm();
       }
-      logPriorDict[it->first] = -distance;
-    }
-    /* Compute the total prior */
-    for (auto it = logPriorDict.begin(); it != logPriorDict.end(); ++it)
-      logPrior += logPriorDict[it->first];
+    logPrior *= priorWt;
+    return logPrior;
+  }
+  
+  void adagrad_vec(unsigned word, RowVectorXf delWordVec, double rate) {
+    RowVectorXf delVecSq = delWordVec.array().square();
+    adagradVecMem[word] += delVecSq;
+    RowVectorXf temp = adagradVecMem[word].array().sqrt();
+    wordVectors[word] += rate * delWordVec.cwiseQuotient(temp); 
+  }
+  
+  void adagrad_bias(unsigned word, double delBias, double rate) {
+    adagradBiasMem[word] += delBias * delBias;
+    wordBiases[word] += rate*delBias/sqrt(adagradBiasMem[word]);
   }
     
   void set_noise_dist() {
@@ -104,7 +113,6 @@ public:
   double 
   prob_model_to_noise(unsigned tgtWord, RowVectorXf conVec, double biasSum) {
     double lpThetaTgt = wordVectors[tgtWord].dot(conVec) + biasSum;
-    lpThetaTgt -= logPrior/corpusSize;
     double lpNoiseTgt = logNumNoiseWords+noiseDist[tgtWord];
     double pNoiseToThetaTgt = 1/(1+exp(lpThetaTgt-lpNoiseTgt));
     assert (isfinite(pNoiseToThetaTgt));
@@ -159,30 +167,20 @@ public:
   return lh;
   }
   
-  void train_nce(vector<unsigned>& words, unsigned nCores, double rate,
-                 mapLexParaP& pp) {
+  void 
+  train_posterior_nce(vector<unsigned>& words, unsigned nCores, double rate) {
     unsigned tgtWrdIx;
     #pragma omp parallel num_threads(nCores)
     #pragma omp for nowait private(tgtWrdIx)
     for (tgtWrdIx=0; tgtWrdIx<words.size(); ++tgtWrdIx) {
       unsigned tgtWord = words[tgtWrdIx];
+      /* Get the words in the window context of the target word */
       vector<unsigned> contextWords = context(words, tgtWrdIx, windowSize);
-      /* Get context vector statistics */
       RowVectorXf contextVec(vecLen);contextVec.setZero(vecLen);
       double contextBias = 0;
-      vector<RowVectorXf> gradPriorCon;
       for (unsigned c=0; c<contextWords.size(); ++c) {
-        unsigned conWord = contextWords[c];
-        contextVec += wordVectors[conWord];
-        contextBias += wordBiases[conWord];
-        /* Get gradient of prior wrt context words in advance */
-        RowVectorXf gPriorCon(vecLen);gPriorCon.setZero(vecLen);
-        if (pp.find(conWord) != pp.end())
-          for (unsigned i=0; i<pp[conWord].size(); ++i) {
-            unsigned ppWord = pp[conWord][i];
-            gPriorCon += 2/corpusSize * (wordVectors[conWord]-wordVectors[ppWord]);
-          }
-        gradPriorCon.push_back(gPriorCon);
+        contextVec += wordVectors[contextWords[c]];
+        contextBias += wordBiases[contextWords[c]];
       }
       /* Get the ratio of probab scores of theta and noise */
       double pNoiseToThetaTgt = 1-prob_model_to_noise(tgtWord, contextVec,
@@ -191,100 +189,61 @@ public:
       unsigned noiseWords[numNoiseWords];
       for (unsigned selWrds=0; selWrds<numNoiseWords; ++selWrds)
         noiseWords[selWrds] = sampler.Draw();
-      /* Marginalization over noise words */
+      /* Get the diff of score of noise words in context and the noise dist */
+      RowVectorXf pThetaToNoiseGradProd(vecLen);
+      pThetaToNoiseGradProd.setZero(vecLen);
       double pThetaToNoiseSum=0;
-      vector<double> pThetaToNoiseList;
       for (unsigned j=0; j<numNoiseWords; ++j) {
         double pThetaToNoise = prob_model_to_noise(noiseWords[j], contextVec,
                                                    contextBias);
         pThetaToNoiseSum += pThetaToNoise;
-        pThetaToNoiseList.push_back(pThetaToNoise);
+        pThetaToNoiseGradProd += pThetaToNoise * wordVectors[noiseWords[j]];
       }
-      /* Calculate target word vector update */
-      RowVectorXf gradTgt = contextVec;
-      if (pp.find(tgtWord) != pp.end())
-        for (unsigned i=0; i<pp[tgtWord].size(); ++i) {
-          unsigned ppWord = pp[tgtWord][i];
-          gradTgt -= 2/corpusSize * (wordVectors[tgtWord]-wordVectors[ppWord]);
-        }
-      /* Calculate context bias update */
-      RowVectorXf delTgtVec = pNoiseToThetaTgt * gradTgt;
+      /* Calculate updates */
+      RowVectorXf delTgtVec = pNoiseToThetaTgt * contextVec;
       double delConBias = pNoiseToThetaTgt - pThetaToNoiseSum;
-      /* Calculate context vector updates */
-      vector<RowVectorXf> delConVecs;
-      for (unsigned c=0; c<contextWords.size(); ++c) {
-        RowVectorXf delConVec = pNoiseToThetaTgt * wordVectors[tgtWord];
-        delConVec -= pNoiseToThetaTgt * gradPriorCon[c];
-        for (unsigned j=0; j<numNoiseWords; ++j)
-          delConVec -= pThetaToNoiseList[j]*(wordVectors[noiseWords[j]]-gradPriorCon[c]);
-        delConVecs.push_back(delConVec);
-      }
+      RowVectorXf delConVec = pNoiseToThetaTgt * wordVectors[tgtWord];
+      delConVec -= pThetaToNoiseGradProd;
       /* Apply the updates */
-      update(tgtWord, contextWords, delTgtVec, delConVecs, delConBias, rate);
-    }
-    /* Change the prior only once per sentence to avoid computational cost */
-    update_prior(words, pp);
-  }
-  
-  void update_prior(vector<unsigned>& words, mapLexParaP& pp) {
-    for (unsigned i=0; i<words.size(); ++i) {
-      unsigned word = words[i];
-      if (pp.find(word) != pp.end()) {
-        /* Remove the old component of this word's prior */
-        logPrior -= logPriorDict[word];
-        /* Calculate the new component of this word's prior */
-        double distance = 0;
-        for (unsigned i=0; i<pp[word].size(); ++i) {
-          unsigned ppWord = pp[word][i];
-          RowVectorXf delVec = wordVectors[word]-wordVectors[ppWord];
-          distance += delVec.squaredNorm();
-        }
-        /* Update the prior component dict */
-        logPriorDict[word] = -distance;
-        /* Update the overall prior */
-        logPrior += logPriorDict[word];
-      }
-    }
-  }
-  
-  void update(unsigned tgtWord, vector<unsigned>& contextWords, 
-              RowVectorXf delTgtVec, vector<RowVectorXf>& delConVecs, 
-              double delConBias, double rate) {
-    /* Update the target word vector */
-    RowVectorXf delTgtVecSq = delTgtVec.array().square();
-    adagradVecMem[tgtWord] += delTgtVecSq;
-    RowVectorXf temp = adagradVecMem[tgtWord].array().sqrt();
-    wordVectors[tgtWord] += rate * delTgtVec.cwiseQuotient(temp); 
-    /* Update the context word vectors */
-    double delConBiasSq = delConBias * delConBias;
-    for (unsigned k=0; k<contextWords.size(); ++k) {
-      unsigned conWord = contextWords[k];
-      RowVectorXf delConVecSq = delConVecs[k].array().square();
-      /* Update the adagrad memory first */
-      adagradVecMem[conWord] += delConVecSq;
-      adagradBiasMem[conWord] += delConBiasSq;
-      /* Now apply the updates */
-      RowVectorXf temp = adagradVecMem[conWord].array().sqrt();
-      wordVectors[conWord] += rate*delConVecs[k].cwiseQuotient(temp);
-      wordBiases[conWord] += rate*delConBias/sqrt(adagradBiasMem[conWord]);
+      update(tgtWord, contextWords, delTgtVec, delConVec, delConBias, rate);
     }
   }
 
+  void train_prior(unsigned numWords, mapLexParaP& pp, double rate,
+                   unsigned nCores, vector<unsigned>& ppSrcWords, double priorWt) {
+    unsigned wordIndx;
+    #pragma omp parallel num_threads(nCores)
+    #pragma omp for nowait private(wordIndx)            
+    for (wordIndx=0; wordIndx < ppSrcWords.size(); ++wordIndx) {
+      unsigned word = ppSrcWords[wordIndx];
+      RowVectorXf delVec(vecLen); delVec.setZero(vecLen);
+      for (unsigned i=0; i<pp[word].size(); ++i) {
+        unsigned ppWord = pp[word][i];
+        delVec += -2*(wordVectors[word]-wordVectors[ppWord]);
+      }
+      /* Divide the update of prior to sum to 1 in the end */
+      delVec *= priorWt * numWords/corpusSize;
+      adagrad_vec(word, delVec, rate);
+    }
+  }
+  
   void 
   train_on_corpus(string corpus, unsigned iter, unsigned nCores, double lRate,
-                  string ppCorpus) {
+                  string ppCorpus, double priorWt, unsigned updatePrior) {
     preprocess_vocab(corpus);
     init_vectors(vocabSize, vecLen);
     set_noise_dist();
     mapLexParaP paraPhrases = read_lex_parap(ppCorpus, indexedVocab);
-    compute_prior(paraPhrases);
+    vector<unsigned> ppWords;
+    for (auto it=paraPhrases.begin(); it != paraPhrases.end(); ++it) 
+      ppWords.push_back(it->first);
     time_t start, end;
     time(&start);
     cerr << "\nCorpus size: " << corpusSize;
-    cerr << "\nLog posterior: " << log_lh(corpus, nCores);
-    cerr << "\nLog prior: " << logPrior;
+    /*cerr << "\nLog posterior: " << log_lh(corpus, nCores);
+    cerr << "\nLog prior: " << compute_and_set_prior(paraPhrases, priorWt);
     time(&end);
-    cerr << "\nTime taken: " << float(difftime(end,start)/3600) << " hrs";
+    cerr << "\nTime taken: " << float(difftime(end,start)/3600) << " hrs";*/
     for (unsigned i=0; i<iter; ++i) {
       double rate = lRate/(i+1);
       cerr << "\n\nIteration: " << i+1;
@@ -292,7 +251,7 @@ public:
       ifstream inputFile(corpus.c_str());
       string line, normWord;
       vector<unsigned> words;
-      unsigned numWords = 0;
+      unsigned numWords = 0, changePrior = updatePrior;
       if (inputFile.is_open()) {
         time(&start);
         while (getline(inputFile, line)) {
@@ -303,18 +262,22 @@ public:
             if (word2norm.find(tokens[j]) != word2norm.end())
               words.push_back(indexedVocab[word2norm[tokens[j]]]);
           /* Train word vectors now */
-          train_nce(words, nCores, rate, paraPhrases);
+          train_posterior_nce(words, nCores, rate);
+          if (numWords > changePrior) {
+            train_prior(updatePrior, paraPhrases, rate, nCores, ppWords, priorWt);
+            changePrior += updatePrior;
+          }
           numWords += words.size();
           cerr << int(numWords/1000) << "K\r";
         }
         inputFile.close();
         time(&end);
         cerr << "Time taken: " << float(difftime(end,start)/3600) << " hrs\n";
-        time(&start);
+        /*time(&start);
         cerr << "\nLog posterior: " << log_lh(corpus, nCores);
-        cerr << "\nLog prior: " << logPrior;
+        cerr << "\nLog prior: " << compute_and_set_prior(paraPhrases, priorWt);
         time(&end);
-        cerr << "\nTime taken: " << float(difftime(end,start)/3660) << " hrs";
+        cerr << "\nTime taken: " << float(difftime(end,start)/3660) << " hrs";*/
       }
       else {
         cerr << "\nUnable to open file\n";
@@ -325,14 +288,14 @@ public:
 };
 
 int main(int argc, char **argv){
-  string corpus = "../1k";
-  string ppCorpus = "corpora/clean-1.0-s-lexical.txt";
-  unsigned window = 5, freqCutoff = 2, noiseWords = 10, vectorLen = 80;
-  unsigned numIter = 5, numCores = 5;
-  double rate = 0.05;
+  string corpus = "corpora/news.2011.en.norm";
+  string ppCorpus = "corpora/clean-1.0-m-lexical.txt";
+  unsigned window = 5, freqCutoff = 10, noiseWords = 10, vectorLen = 80;
+  unsigned numIter = 5, numCores = 15, updatePrior = 10000;
+  double rate = 0.05, priorWt = 1;
   
   WordVectorLearner obj(window, freqCutoff, noiseWords, vectorLen);
-  obj.train_on_corpus(corpus, numIter, numCores, rate, ppCorpus);
-  print_vectors("x.txt", obj.wordVectors, obj.indexedVocab);
+  obj.train_on_corpus(corpus, numIter, numCores, rate, ppCorpus, priorWt, updatePrior);
+  print_vectors("vectors/prior/news-wt1-m.txt", obj.wordVectors, obj.indexedVocab);
   return 1;
 }
