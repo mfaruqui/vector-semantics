@@ -72,8 +72,8 @@ public:
   void init_vectors(unsigned vocabSize, unsigned vecLen) {
     wordVectors = random_vector(vocabSize, vecLen); 
     wordBiases = random_vector(vocabSize);
-    adagradVecMem = epsilon_vector(vocabSize, vecLen);
-    adagradBiasMem = epsilon_vector(vocabSize);
+    adagradVecMem = random_vector(vocabSize, vecLen);
+    adagradBiasMem = random_vector(vocabSize);
   }
   
   /* Compute total prior */
@@ -99,6 +99,18 @@ public:
   void adagrad_bias(unsigned word, double delBias, double rate) {
     adagradBiasMem[word] += delBias * delBias;
     wordBiases[word] += rate*delBias/sqrt(adagradBiasMem[word]);
+  }
+  
+  void update(unsigned tgtWord, vector<unsigned>& contextWords, 
+              RowVectorXf delTgtVec, RowVectorXf delConVec, 
+              double delConBias, double rate) {
+    /* Update the target word vector */
+    adagrad_vec(tgtWord, delTgtVec, rate);
+    /* Update the context word vectors */
+    for (unsigned k=0; k<contextWords.size(); ++k) {
+      adagrad_vec(contextWords[k], delConVec, rate);
+      adagrad_bias(contextWords[k], delConBias, rate);
+    }
   }
     
   void set_noise_dist() {
@@ -148,6 +160,8 @@ public:
             contextVec += wordVectors[contextWords[c]];
             biasSum += wordBiases[contextWords[c]];
           }
+          contextVec /= contextWords.size();
+          biasSum /= contextWords.size();
           double contextScore = wordVectors[tgtWord].dot(contextVec) + biasSum;
           /* Get vocab context score */
           double vocabContextScore = 0;
@@ -176,12 +190,15 @@ public:
       unsigned tgtWord = words[tgtWrdIx];
       /* Get the words in the window context of the target word */
       vector<unsigned> contextWords = context(words, tgtWrdIx, windowSize);
+      if (contextWords.size() < 1) continue;
       RowVectorXf contextVec(vecLen);contextVec.setZero(vecLen);
       double contextBias = 0;
       for (unsigned c=0; c<contextWords.size(); ++c) {
         contextVec += wordVectors[contextWords[c]];
         contextBias += wordBiases[contextWords[c]];
       }
+      contextVec /= contextWords.size();
+      contextBias /= contextWords.size();
       /* Get the ratio of probab scores of theta and noise */
       double pNoiseToThetaTgt = 1-prob_model_to_noise(tgtWord, contextVec,
                                                       contextBias);
@@ -204,6 +221,10 @@ public:
       double delConBias = pNoiseToThetaTgt - pThetaToNoiseSum;
       RowVectorXf delConVec = pNoiseToThetaTgt * wordVectors[tgtWord];
       delConVec -= pThetaToNoiseGradProd;
+      /* All updates need to averaged by the context size */
+      delTgtVec /= contextWords.size();
+      delConVec /= contextWords.size();
+      delConBias /= contextWords.size();
       /* Apply the updates */
       update(tgtWord, contextWords, delTgtVec, delConVec, delConBias, rate);
     }
@@ -240,7 +261,7 @@ public:
     time_t start, end;
     time(&start);
     cerr << "\nCorpus size: " << corpusSize;
-    /*cerr << "\nLog posterior: " << log_lh(corpus, nCores);
+    /*cerr << "\nLog posterior per word: " << log_lh(corpus, nCores)/corpusSize;
     cerr << "\nLog prior: " << compute_and_set_prior(paraPhrases, priorWt);
     time(&end);
     cerr << "\nTime taken: " << float(difftime(end,start)/3600) << " hrs";*/
@@ -274,7 +295,7 @@ public:
         time(&end);
         cerr << "Time taken: " << float(difftime(end,start)/3600) << " hrs\n";
         /*time(&start);
-        cerr << "\nLog posterior: " << log_lh(corpus, nCores);
+        cerr << "\nLog posterior per word: " << log_lh(corpus, nCores)/corpusSize;
         cerr << "\nLog prior: " << compute_and_set_prior(paraPhrases, priorWt);
         time(&end);
         cerr << "\nTime taken: " << float(difftime(end,start)/3660) << " hrs";*/
@@ -288,14 +309,21 @@ public:
 };
 
 int main(int argc, char **argv){
-  string corpus = "corpora/news.2011.en.norm";
-  string ppCorpus = "corpora/clean-1.0-m-lexical.txt";
-  unsigned window = 5, freqCutoff = 10, noiseWords = 10, vectorLen = 80;
-  unsigned numIter = 5, numCores = 15, updatePrior = 10000;
-  double rate = 0.05, priorWt = 1;
+  /* For PPDBD training these will mostly remain the same */
+  unsigned window = 5, freqCutoff = 1, noiseWords = 10, vectorLen = 80;
+  unsigned numIter = 1;
+  double rate = 0.05;
+  
+  string corpus = argv[1];
+  string ppCorpus = argv[2];
+  string outFile = argv[3];
+  string outVecFile = outFile+"_vec.txt", outBiasFile = outFile+"_bias.txt";
+  unsigned updatePrior = atoi(argv[4]), numCores = atoi(argv[6]);
+  double priorWt = atof(argv[5]);
   
   WordVectorLearner obj(window, freqCutoff, noiseWords, vectorLen);
   obj.train_on_corpus(corpus, numIter, numCores, rate, ppCorpus, priorWt, updatePrior);
-  print_vectors("vectors/prior/news-wt1-m.txt", obj.wordVectors, obj.indexedVocab);
+  print_vectors(outVecFile, obj.wordVectors, obj.indexedVocab);
+  print_biases(outBiasFile, obj.wordBiases, obj.indexedVocab);
   return 1;
 }

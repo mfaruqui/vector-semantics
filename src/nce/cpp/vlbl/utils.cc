@@ -133,6 +133,19 @@ mapUnsignedDouble get_unigram_dist(mapStrUnsigned& vocab, mapStrUnsigned& indexe
   return unigramDist;
 }
 
+RowVectorXf zero_vector(const unsigned length) {
+  RowVectorXf zeroVec(length);
+  zeroVec.setZero(length);
+  return zeroVec;
+}
+
+vector<RowVectorXf> zero_vector(unsigned row, unsigned col) {
+  vector<RowVectorXf> zeroVec;
+  for (unsigned i=0; i<row; ++i)
+    zeroVec.push_back(zero_vector(col));
+  return zeroVec;
+}
+
 RowVectorXf random_vector(const unsigned length) {
   RowVectorXf randVec(length);
   for (unsigned i=0; i<randVec.size(); ++i)
@@ -148,9 +161,9 @@ vector<RowVectorXf> random_vector(unsigned row, unsigned col) {
   return randVec;
 }
 
-void print_vectors(char* fileName, vector<RowVectorXf>& wordVectors,
+void print_vectors(string fileName, vector<RowVectorXf>& wordVectors,
                    mapStrUnsigned& indexedVocab) {
-  ofstream outFile(fileName);
+  ofstream outFile(fileName.c_str());
   mapStrUnsigned::iterator it;
   for (it=indexedVocab.begin(); it!= indexedVocab.end(); it++) {
     outFile << it->first << " ";
@@ -161,9 +174,9 @@ void print_vectors(char* fileName, vector<RowVectorXf>& wordVectors,
   outFile.close();
 }
 
-void print_biases(char* fileName, RowVectorXf wordBiases,
+void print_biases(string fileName, RowVectorXf wordBiases,
                    mapStrUnsigned& indexedVocab) {
-  ofstream outFile(fileName);
+  ofstream outFile(fileName.c_str());
   mapStrUnsigned::iterator it;
   for (it=indexedVocab.begin(); it!= indexedVocab.end(); it++)
     outFile << it->first << " " << wordBiases[it->second] << "\n";

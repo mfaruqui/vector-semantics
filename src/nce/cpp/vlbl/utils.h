@@ -30,9 +30,11 @@ mapUnsignedDouble get_log_unigram_dist(mapStrUnsigned& vocab, mapStrUnsigned& in
 mapUnsignedDouble get_unigram_dist(mapStrUnsigned& vocab, mapStrUnsigned& indexedVocab);
 double get_corpus_size(mapStrUnsigned& vocab, mapStrUnsigned& indexedVocab);
 
+RowVectorXf zero_vector(const unsigned length);
+vector<RowVectorXf> zero_vector(unsigned row, unsigned col);
 RowVectorXf random_vector(const unsigned length);
 vector<RowVectorXf> random_vector(unsigned row, unsigned col);
 
-void print_vectors(char* fileName, vector<RowVectorXf>& wordVectors,
+void print_vectors(string fileName, vector<RowVectorXf>& wordVectors,
                    mapStrUnsigned& indexedVocab);
-void print_biases(char*, RowVectorXf, mapStrUnsigned&);
+void print_biases(string, RowVectorXf, mapStrUnsigned&);
