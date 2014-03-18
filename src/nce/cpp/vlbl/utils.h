@@ -28,11 +28,11 @@ mapStrUnsigned reindex_vocab(vector<string> vocabList);
 
 mapUnsignedDouble get_log_unigram_dist(mapStrUnsigned& vocab, mapStrUnsigned& indexedVocab);
 mapUnsignedDouble get_unigram_dist(mapStrUnsigned& vocab, mapStrUnsigned& indexedVocab);
+double get_corpus_size(mapStrUnsigned& vocab, mapStrUnsigned& indexedVocab);
 
-RowVectorXf epsilon_vector(unsigned row);
-vector<RowVectorXf> epsilon_vector(unsigned row, unsigned col);
 RowVectorXf random_vector(const unsigned length);
 vector<RowVectorXf> random_vector(unsigned row, unsigned col);
 
 void print_vectors(char* fileName, vector<RowVectorXf>& wordVectors,
                    mapStrUnsigned& indexedVocab);
+void print_biases(char*, RowVectorXf, mapStrUnsigned&);

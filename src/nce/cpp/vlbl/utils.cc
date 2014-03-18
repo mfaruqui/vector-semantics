@@ -115,6 +115,13 @@ mapUnsignedDouble get_log_unigram_dist(mapStrUnsigned& vocab, mapStrUnsigned& in
   return unigramDist;
 }
 
+double get_corpus_size(mapStrUnsigned& vocab, mapStrUnsigned& indexedVocab) {
+  double sumFreq = 0;
+  for (auto it = indexedVocab.begin(); it != indexedVocab.end(); ++it)
+    sumFreq += vocab[it->first];
+  return sumFreq;
+}
+
 mapUnsignedDouble get_unigram_dist(mapStrUnsigned& vocab, mapStrUnsigned& indexedVocab) {
   double sumFreq = 0;
   mapUnsignedDouble unigramDist;
@@ -124,21 +131,6 @@ mapUnsignedDouble get_unigram_dist(mapStrUnsigned& vocab, mapStrUnsigned& indexe
   for (it = indexedVocab.begin(); it != indexedVocab.end(); ++it)
     unigramDist[it->second] = vocab[it->first]/sumFreq;
   return unigramDist;
-}
-
-RowVectorXf epsilon_vector(unsigned row) {
-  RowVectorXf nonZeroVec(row);
-  nonZeroVec.setOnes(row);
-  nonZeroVec *= EPSILON;
-  return nonZeroVec;
-}
-
-vector<RowVectorXf> epsilon_vector(unsigned row, unsigned col) {
-  vector<RowVectorXf> epsilonVec;
-  RowVectorXf vec = epsilon_vector(col);
-  for (unsigned i=0; i<row; ++i)
-    epsilonVec.push_back(vec);
-  return epsilonVec;
 }
 
 RowVectorXf random_vector(const unsigned length) {
@@ -166,4 +158,14 @@ void print_vectors(char* fileName, vector<RowVectorXf>& wordVectors,
       outFile << wordVectors[it->second][i] << " ";
     outFile << "\n";
   }
+  outFile.close();
+}
+
+void print_biases(char* fileName, RowVectorXf wordBiases,
+                   mapStrUnsigned& indexedVocab) {
+  ofstream outFile(fileName);
+  mapStrUnsigned::iterator it;
+  for (it=indexedVocab.begin(); it!= indexedVocab.end(); it++)
+    outFile << it->first << " " << wordBiases[it->second] << "\n";
+  outFile.close();
 }
