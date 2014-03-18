@@ -124,8 +124,6 @@ public:
             contextVec += wordVectors[contextWords[c]];
             biasSum += wordBiases[contextWords[c]];
           }
-          /*contextVec /= contextWords.size();
-          biasSum /= contextWords.size();*/
           double contextScore = wordVectors[tgtWord].dot(contextVec) + biasSum;
           /* Get vocab context score */
           double vocabContextScore = 0;
@@ -160,8 +158,6 @@ public:
         contextVec += wordVectors[contextWords[c]];
         contextBias += wordBiases[contextWords[c]];
       }
-      /*contextVec /= contextWords.size();
-      contextBias /= contextWords.size();*/
       /* Get the ratio of probab scores of theta and noise */
       double pNoiseToThetaTgt = 1-prob_model_to_noise(tgtWord, contextVec,
                                                       contextBias);
@@ -184,10 +180,6 @@ public:
       double delConBias = pNoiseToThetaTgt - pThetaToNoiseSum;
       RowVectorXf delConVec = pNoiseToThetaTgt * wordVectors[tgtWord];
       delConVec -= pThetaToNoiseGradProd;
-      /* All updates need to averaged by the context size 
-      delTgtVec /= contextWords.size();
-      delConVec /= contextWords.size();
-      delConBias /= contextWords.size();*/
       /* Apply the updates */
       update(tgtWord, contextWords, delTgtVec, delConVec, delConBias, rate);
     }
