@@ -160,6 +160,8 @@ public:
         contextVec += wordVectors[contextWords[c]];
         contextBias += wordBiases[contextWords[c]];
       }
+      contextVec /= contextWords.size();
+      contextBias /= contextWords.size();
       /* Get the ratio of probab scores of theta and noise */
       double pNoiseToThetaTgt = 1-prob_model_to_noise(tgtWord, contextVec,
                                                       contextBias);
@@ -182,6 +184,7 @@ public:
       double delConBias = pNoiseToThetaTgt - pThetaToNoiseSum;
       RowVectorXf delConVec = pNoiseToThetaTgt * wordVectors[tgtWord];
       delConVec -= pThetaToNoiseGradProd;
+      /* All updates need to averaged by the context size */
       delTgtVec /= contextWords.size();
       delConVec /= contextWords.size();
       delConBias /= contextWords.size();
@@ -222,9 +225,9 @@ public:
     time_t start, end;
     time(&start);
     cerr << "\nCorpus size: " << corpusSize << "\n";
-    cerr << "\nLLH per word: \n" << log_lh(corpus, nCores)/corpusSize;
+    /*cerr << "\nLLH per word: \n" << log_lh(corpus, nCores)/corpusSize;
     time(&end);
-    cerr << "\nTime taken: " << float(difftime(end,start)/3600) << " hrs";
+    cerr << "\nTime taken: " << float(difftime(end,start)/3600) << " hrs";*/
     for (unsigned i=0; i<iter; ++i) {
       double rate = lRate/(i+1);
       cerr << "\n\nIteration: " << i+1;
@@ -245,16 +248,16 @@ public:
           /* Train word vectors now */
           train_nce(words, nCores, rate);
           numWords += words.size();
-          cerr << int(numWords/1000) << "K\r";
+          cerr << int(numWords/10000) << "0K\r";
         }
         inputFile.close();
         time(&end);
         cerr << "Time taken: " << float(difftime(end,start)/3600) << " hrs\n";
-        time(&start);
+        /*time(&start);
         cerr << "\nLLH per word: \n";
         cerr << log_lh(corpus, nCores)/corpusSize;
         time(&end);
-        cerr << "\nTime taken: " << float(difftime(end,start)/3660) << " hrs";
+        cerr << "\nTime taken: " << float(difftime(end,start)/3660) << " hrs";*/
       }
       else {
         cerr << "\nUnable to open file\n";
@@ -265,14 +268,14 @@ public:
 };
 
 int main(int argc, char **argv){
-  string corpus = "../10k";
-  unsigned window = 5, freqCutoff = 2, noiseWords = 10, vectorLen = 80;
-  unsigned numIter = 5, numCores = 15;
+  string corpus = "corpora/news.2011.en.norm";
+  unsigned window = 5, freqCutoff = 10, noiseWords = 10, vectorLen = 80;
+  unsigned numIter = 1, numCores = 10;
   double rate = 0.05;
   
   WordVectorLearner obj(window, freqCutoff, noiseWords, vectorLen);
   obj.train_on_corpus(corpus, numIter, numCores, rate);
-  print_vectors("x.txt", obj.wordVectors, obj.indexedVocab);
-  //print_biases("random_bias.txt", obj.wordBiases, obj.indexedVocab);
+  print_vectors("vectors/base-avg-vec.txt", obj.wordVectors, obj.indexedVocab);
+  print_biases("vectors/base-avg-bias.txt", obj.wordBiases, obj.indexedVocab);
   return 1;
 }
