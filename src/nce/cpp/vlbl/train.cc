@@ -73,8 +73,8 @@ public:
   void init_vectors(unsigned vocabSize, unsigned vecLen) {
     wordVectors = random_vector(vocabSize, vecLen); 
     wordBiases = random_vector(vocabSize);
-    adagradVecMem = epsilon_vector(vocabSize, vecLen);
-    adagradBiasMem = epsilon_vector(vocabSize);
+    adagradVecMem = random_vector(vocabSize, vecLen);
+    adagradBiasMem = random_vector(vocabSize);
   }
     
   void set_noise_dist() {
@@ -124,6 +124,8 @@ public:
             contextVec += wordVectors[contextWords[c]];
             biasSum += wordBiases[contextWords[c]];
           }
+          contextVec /= contextWords.size();
+          biasSum /= contextWords.size();
           double contextScore = wordVectors[tgtWord].dot(contextVec) + biasSum;
           /* Get vocab context score */
           double vocabContextScore = 0;
@@ -151,6 +153,7 @@ public:
       unsigned tgtWord = words[tgtWrdIx];
       /* Get the words in the window context of the target word */
       vector<unsigned> contextWords = context(words, tgtWrdIx, windowSize);
+      if (contextWords.size() < 1) continue;
       RowVectorXf contextVec(vecLen);contextVec.setZero(vecLen);
       double contextBias = 0;
       for (unsigned c=0; c<contextWords.size(); ++c) {
@@ -179,6 +182,9 @@ public:
       double delConBias = pNoiseToThetaTgt - pThetaToNoiseSum;
       RowVectorXf delConVec = pNoiseToThetaTgt * wordVectors[tgtWord];
       delConVec -= pThetaToNoiseGradProd;
+      delTgtVec /= contextWords.size();
+      delConVec /= contextWords.size();
+      delConBias /= contextWords.size();
       /* Apply the updates */
       update(tgtWord, contextWords, delTgtVec, delConVec, delConBias, rate);
     }
@@ -191,7 +197,7 @@ public:
     RowVectorXf delTgtVecSq = delTgtVec.array().square();
     adagradVecMem[tgtWord] += delTgtVecSq;
     RowVectorXf temp = adagradVecMem[tgtWord].array().sqrt();
-    wordVectors[tgtWord] += rate * delTgtVec.cwiseQuotient(temp); 
+    wordVectors[tgtWord] += rate * delTgtVec.cwiseQuotient(temp);
     /* Update the context word vectors */
     RowVectorXf delConVecSq = delConVec.array().square();
     double delConBiasSq = delConBias * delConBias;
@@ -212,9 +218,11 @@ public:
     preprocess_vocab(corpus);
     init_vectors(vocabSize, vecLen);
     set_noise_dist();
+    double corpusSize = get_corpus_size(vocab, indexedVocab);
     time_t start, end;
     time(&start);
-    cerr << "\nLog likelihood: " << log_lh(corpus, nCores);
+    cerr << "\nCorpus size: " << corpusSize << "\n";
+    cerr << "\nLLH per word: \n" << log_lh(corpus, nCores)/corpusSize;
     time(&end);
     cerr << "\nTime taken: " << float(difftime(end,start)/3600) << " hrs";
     for (unsigned i=0; i<iter; ++i) {
@@ -243,7 +251,8 @@ public:
         time(&end);
         cerr << "Time taken: " << float(difftime(end,start)/3600) << " hrs\n";
         time(&start);
-        cerr << "\nLog likelihood: " << log_lh(corpus, nCores);
+        cerr << "\nLLH per word: \n";
+        cerr << log_lh(corpus, nCores)/corpusSize;
         time(&end);
         cerr << "\nTime taken: " << float(difftime(end,start)/3660) << " hrs";
       }
@@ -256,13 +265,14 @@ public:
 };
 
 int main(int argc, char **argv){
-  string corpus = "../100";
-  unsigned window = 5, freqCutoff = 1, noiseWords = 10, vectorLen = 80;
-  unsigned numIter = 5, numCores = 5;
+  string corpus = "../10k";
+  unsigned window = 5, freqCutoff = 2, noiseWords = 10, vectorLen = 80;
+  unsigned numIter = 5, numCores = 15;
   double rate = 0.05;
   
   WordVectorLearner obj(window, freqCutoff, noiseWords, vectorLen);
   obj.train_on_corpus(corpus, numIter, numCores, rate);
   print_vectors("x.txt", obj.wordVectors, obj.indexedVocab);
+  //print_biases("random_bias.txt", obj.wordBiases, obj.indexedVocab);
   return 1;
 }
