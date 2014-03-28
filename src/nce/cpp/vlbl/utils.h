@@ -1,5 +1,6 @@
 #include <iostream>
 #include <vector>
+#include <random>
 #include <fstream>
 #include <functional>
 #include <cmath>
@@ -34,6 +35,10 @@ RowVectorXf zero_vector(const unsigned length);
 vector<RowVectorXf> zero_vector(unsigned row, unsigned col);
 RowVectorXf random_vector(const unsigned length);
 vector<RowVectorXf> random_vector(unsigned row, unsigned col);
+RowVectorXf normal_vector(const unsigned length);
+vector<RowVectorXf> normal_vector(unsigned row, unsigned col);
+RowVectorXf epsilon_vector(unsigned row);
+vector<RowVectorXf> epsilon_vector(unsigned row, unsigned col);
 
 void print_vectors(string fileName, vector<RowVectorXf>& wordVectors,
                    mapStrUnsigned& indexedVocab);

@@ -3,6 +3,9 @@
 using namespace std;
 using namespace Eigen;
 
+default_random_engine GEN;
+normal_distribution<double> NORMAL(0.0,1.0);
+
 string normalize_word(string& word) {
   if (std::string::npos != word.find_first_of("0123456789"))
     return "---num---";
@@ -145,6 +148,37 @@ vector<RowVectorXf> zero_vector(unsigned row, unsigned col) {
     zeroVec.push_back(zero_vector(col));
   return zeroVec;
 }
+
+RowVectorXf epsilon_vector(unsigned row) {
+  RowVectorXf nonZeroVec(row);
+  nonZeroVec.setOnes(row);
+  nonZeroVec *= EPSILON;
+  return nonZeroVec;
+}
+
+vector<RowVectorXf> epsilon_vector(unsigned row, unsigned col) {
+  vector<RowVectorXf> epsilonVec;
+  RowVectorXf vec = epsilon_vector(col);
+  for (unsigned i=0; i<row; ++i)
+    epsilonVec.push_back(vec);
+  return epsilonVec;
+}
+
+RowVectorXf normal_vector(const unsigned length) {
+  RowVectorXf randVec(length);
+  for (unsigned i=0; i<randVec.size(); ++i)
+    randVec[i] = NORMAL(GEN);
+  randVec /= randVec.norm();
+  return randVec;
+}
+
+vector<RowVectorXf> normal_vector(unsigned row, unsigned col) {
+  vector<RowVectorXf> randVec;
+  for (unsigned i=0; i<row; ++i)
+    randVec.push_back(normal_vector(col));
+  return randVec;
+}
+
 
 RowVectorXf random_vector(const unsigned length) {
   RowVectorXf randVec(length);
