@@ -20,10 +20,6 @@ Following are the role of different files:
 
 1. train.cc -- generate simple embeddings using word co-occurrences
 
-2. train-prior.cc -- generate word embeddings using an exponential prior based on euclidean distance.
-The prior gets updated after a number of words have been seen. This parameter is to be given by the user
-along with the weight given to the euclidean distance in the prior.
+2. train-prior.cc -- generate word embeddings using an exponential prior based on euclidean distance. The prior gets updated after a number of words have been seen. This parameter is to be given by the user along with the weight given to the euclidean distance in the prior.
 
-3. train-prior-grad-zero.cc -- the prior of a graph based similarity measure between words in the paraphrase
-databse is set to zero and the vector is updated according to that after a number of words have been seen. This
-will be documented in a report soon. 
+3. train-prior-grad-zero.cc -- the prior of a graph based similarity measure between words in the paraphrase database is set to zero and the vector is updated according to that after a number of words have been seen. This will be documented in a report soon. 
