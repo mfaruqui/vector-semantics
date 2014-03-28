@@ -7,16 +7,8 @@ with the License. You may obtain a copy of the License at:
 
 This code repository contains the code for generating log-bilinear
 word embeddings using noise contrastive estimation as explained in
-(Mnih and Kavukcuoglu, NIPS 2013). 
-
-The code can run on multiple cores using openmp (C++). The speedup
-with using multiple cores is a little less than linear. For example
-using 6 cores can give up 3-4 times speedup.
-
-Run time options need to be changed in the main() function as of now.
-You need to download eigen source code and provide its location during
-compilation. You can find the eigen source here:
-     http://eigen.tuxfamily.org/index.php?title=Main_Page
+(Mnih and Kavukcuoglu, NIPS 2013). The objective function however
+is not the same and has been changed. See the report for more details.
 
 Use the following commands to compile and run the program:-
 
