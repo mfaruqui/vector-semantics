@@ -170,27 +170,30 @@ public:
     }
   }
   
-  void train_prior(unsigned numWords, mapLexParaP& pp, double rate,
-                   unsigned nCores, vector<unsigned>& ppSrcWords, double priorWt) {
+  void train_prior(unsigned numWords, mapLexParaP& pp,
+                   unsigned nCores, vector<unsigned>& ppSrcWords) {
     unsigned wordIndx;
     #pragma omp parallel num_threads(nCores)
     #pragma omp for nowait private(wordIndx)            
     for (wordIndx=0; wordIndx < ppSrcWords.size(); ++wordIndx) {
       unsigned word = ppSrcWords[wordIndx];
-      RowVectorXf delVec(vecLen); delVec.setZero(vecLen);
+      if (pp[word].size() < 1) continue;
+      /* Weigh the original word vec by the num paraphrases */
+      RowVectorXf newVec = pp[word].size()*wordVectors[word];
       for (unsigned i=0; i<pp[word].size(); ++i) {
         unsigned ppWord = pp[word][i];
-        delVec += -2*(wordVectors[word]-wordVectors[ppWord]);
+        /* weigh all paraphrases by 1 */
+        newVec += wordVectors[ppWord];
       }
       /* Divide the update of prior to sum to 1 in the end */
-      delVec *= priorWt * numWords/corpusSize;
-      adagrad_vec(word, delVec, rate);
+      newVec /= 2*pp[word].size();
+      wordVectors[word] = newVec;
     }
   }
-  
+
   void 
   train_on_corpus(string corpus, unsigned iter, unsigned nCores, double lRate,
-                  string ppCorpus, double priorWt, unsigned updatePrior) {
+                  string ppCorpus, unsigned updatePrior) {
     preprocess_vocab(corpus);
     init_vectors(vocabSize, vecLen);
     set_noise_dist();
@@ -221,7 +224,7 @@ public:
           /* Train word vectors now */
           train_posterior_nce(words, nCores, rate);
           if (numWords > changePrior) {
-            train_prior(updatePrior, paraPhrases, rate, nCores, ppWords, priorWt);
+            train_prior(updatePrior, paraPhrases, nCores, ppWords);
             changePrior += updatePrior;
           }
           numWords += words.size();
@@ -245,9 +248,9 @@ int main(int argc, char **argv){
   unsigned numIter = 1;
   double rate = 0.05;
   
-  if (argc != 7) {
+  if (argc != 6) {
     cerr << "Usage: "<< argv[0] << " corpusName " << "ppCorpusName ";
-    cerr << "outVecFileName " << "whenToUpdatePrior " << "priorWeight " <<"numCores\n";
+    cerr << "outVecFileName " << "whenToUpdatePrior " <<"numCores\n";
     exit(0);
   }
   
@@ -255,11 +258,10 @@ int main(int argc, char **argv){
   string ppCorpus = argv[2];
   string outFile = argv[3];
   string outVecFile = outFile+"_vec.txt", outBiasFile = outFile+"_bias.txt";
-  unsigned updatePrior = atoi(argv[4]), numCores = atoi(argv[6]);
-  double priorWt = atof(argv[5]);
+  unsigned updatePrior = atoi(argv[4]), numCores = atoi(argv[5]);
   
   WordVectorLearner obj(window, freqCutoff, noiseWords, vectorLen);
-  obj.train_on_corpus(corpus, numIter, numCores, rate, ppCorpus, priorWt, updatePrior);
+  obj.train_on_corpus(corpus, numIter, numCores, rate, ppCorpus, updatePrior);
   print_vectors(outVecFile, obj.wordVectors, obj.indexedVocab);
   print_biases(outBiasFile, obj.wordBiases, obj.indexedVocab);
   return 1;

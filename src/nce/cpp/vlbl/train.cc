@@ -16,8 +16,6 @@
 using namespace std;
 using namespace Eigen;
 
-#define MAX_EXP 10
-
 vector<unsigned> 
 context(vector<unsigned>& words, unsigned tgtWrdIx, unsigned windowSize) {
   vector<unsigned> contextWords;
@@ -71,10 +69,10 @@ public:
   }
     
   void init_vectors(unsigned vocabSize, unsigned vecLen) {
-    wordVectors = random_vector(vocabSize, vecLen); 
-    wordBiases = random_vector(vocabSize);
-    adagradVecMem = random_vector(vocabSize, vecLen);
-    adagradBiasMem = random_vector(vocabSize);
+    wordVectors = normal_vector(vocabSize, vecLen); 
+    wordBiases = normal_vector(vocabSize);
+    adagradVecMem = epsilon_vector(vocabSize, vecLen);
+    adagradBiasMem = epsilon_vector(vocabSize);
   }
     
   void set_noise_dist() {
@@ -124,8 +122,6 @@ public:
             contextVec += wordVectors[contextWords[c]];
             biasSum += wordBiases[contextWords[c]];
           }
-          contextVec /= contextWords.size();
-          biasSum /= contextWords.size();
           double contextScore = wordVectors[tgtWord].dot(contextVec) + biasSum;
           /* Get vocab context score */
           double vocabContextScore = 0;
@@ -160,8 +156,6 @@ public:
         contextVec += wordVectors[contextWords[c]];
         contextBias += wordBiases[contextWords[c]];
       }
-      contextVec /= contextWords.size();
-      contextBias /= contextWords.size();
       /* Get the ratio of probab scores of theta and noise */
       double pNoiseToThetaTgt = 1-prob_model_to_noise(tgtWord, contextVec,
                                                       contextBias);
@@ -184,10 +178,6 @@ public:
       double delConBias = pNoiseToThetaTgt - pThetaToNoiseSum;
       RowVectorXf delConVec = pNoiseToThetaTgt * wordVectors[tgtWord];
       delConVec -= pThetaToNoiseGradProd;
-      /* All updates need to averaged by the context size */
-      delTgtVec /= contextWords.size();
-      delConVec /= contextWords.size();
-      delConBias /= contextWords.size();
       /* Apply the updates */
       update(tgtWord, contextWords, delTgtVec, delConVec, delConBias, rate);
     }
@@ -196,11 +186,6 @@ public:
   void update(unsigned tgtWord, vector<unsigned>& contextWords, 
               RowVectorXf delTgtVec, RowVectorXf delConVec, double delConBias,
               double rate) {
-    /* Update the target word vector */
-    RowVectorXf delTgtVecSq = delTgtVec.array().square();
-    adagradVecMem[tgtWord] += delTgtVecSq;
-    RowVectorXf temp = adagradVecMem[tgtWord].array().sqrt();
-    wordVectors[tgtWord] += rate * delTgtVec.cwiseQuotient(temp);
     /* Update the context word vectors */
     RowVectorXf delConVecSq = delConVec.array().square();
     double delConBiasSq = delConBias * delConBias;
@@ -253,11 +238,11 @@ public:
         inputFile.close();
         time(&end);
         cerr << "Time taken: " << float(difftime(end,start)/3600) << " hrs\n";
-        /*time(&start);
+        time(&start);
         cerr << "\nLLH per word: \n";
         cerr << log_lh(corpus, nCores)/corpusSize;
         time(&end);
-        cerr << "\nTime taken: " << float(difftime(end,start)/3660) << " hrs";*/
+        cerr << "\nTime taken: " << float(difftime(end,start)/3660) << " hrs";
       }
       else {
         cerr << "\nUnable to open file\n";
@@ -268,14 +253,23 @@ public:
 };
 
 int main(int argc, char **argv){
-  string corpus = "corpora/news.2011.en.norm";
   unsigned window = 5, freqCutoff = 10, noiseWords = 10, vectorLen = 80;
-  unsigned numIter = 1, numCores = 10;
+  unsigned numIter = 1;
   double rate = 0.05;
+  
+  if (argc != 4) {
+    cerr << "Usage: "<< argv[0] << " corpusName " << "outVecFileName " << "numCores\n";
+    exit(0);
+  }
+  
+  string corpus = argv[1];
+  string outFile = argv[2];
+  string outVecFile = outFile+"_vec.txt", outBiasFile = outFile+"_bias.txt";
+  unsigned numCores = atoi(argv[3]);
   
   WordVectorLearner obj(window, freqCutoff, noiseWords, vectorLen);
   obj.train_on_corpus(corpus, numIter, numCores, rate);
-  print_vectors("vectors/base-avg-vec.txt", obj.wordVectors, obj.indexedVocab);
-  print_biases("vectors/base-avg-bias.txt", obj.wordBiases, obj.indexedVocab);
+  print_vectors(outVecFile, obj.wordVectors, obj.indexedVocab);
+  print_biases(outBiasFile, obj.wordBiases, obj.indexedVocab);
   return 1;
 }
